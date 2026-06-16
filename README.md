@@ -18,7 +18,7 @@ Workflow complete ✅
 
 ## How it works
 
-Openflow is an [MCP](https://modelcontextprotocol.io) server that plugs into OpenCode. It exposes three tools (`delegate_task`, `get_workflow`, `list_workflows`) and defines a **commander** agent that uses them to orchestrate workflows.
+Openflow is an [MCP](https://modelcontextprotocol.io) server that plugs into OpenCode. It exposes five tools (`delegate_task`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`) and defines a **commander** agent that uses them to orchestrate workflows.
 
 ```mermaid
 graph TD
@@ -32,7 +32,9 @@ graph TD
     Commander -->|"delegate_task(composer)"| MCP
     Commander -->|"delegate_task(coder)"| MCP
     Commander -->|"delegate_task(analyzer)"| MCP
+    Commander -->|"create_workflow / create_agent"| MCP
     MCP -->|"session.create() + session.prompt()"| OC
+    MCP -->|"writes openflow.json / opencode.json"| OC
     OC -->|"child session response"| MCP
     MCP -->|"result"| Commander
 ```
@@ -153,7 +155,7 @@ Define which workflows you want and which agents they use:
 opencode
 ```
 
-OpenCode will automatically load the MCP server on startup. You should see the `delegate_task`, `get_workflow`, and `list_workflows` tools become available.
+OpenCode will automatically load the MCP server on startup. You should see all five tools (`delegate_task`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`) become available.
 
 ---
 
@@ -243,6 +245,19 @@ Reviews the coder's changes against the original acceptance criteria. Produces a
 
 ## Defining custom workflows
 
+### Via the tool (recommended)
+
+Ask the commander to create one for you:
+
+```
+Create a workflow called "hotfix" that runs coder then analyzer,
+with a description "Fast path for urgent fixes".
+```
+
+The commander calls `create_workflow`, which validates agent names and writes to `openflow.json`. The workflow is available immediately — no restart needed.
+
+### Manually
+
 Edit `openflow.json` in your project root:
 
 ```json
@@ -260,10 +275,60 @@ Edit `openflow.json` in your project root:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `sequence` | yes | Ordered list of agent names to run. Each must be defined in `opencode.json`. |
-| `commanderMayAlsoUse` | no | Agents the commander is permitted to deviate to when a step fails. Defaults to `[]`. |
+| `commanderMayAlsoUse` | no | Agents the commander may deviate to when a step fails. Defaults to `[]`. |
 | `description` | no | Shown by `list_workflows`. |
 
-You can reference any agent defined in your `opencode.json` — not just the four built-in ones. Add your own agents and reference them in `sequence`.
+---
+
+## Defining custom agents
+
+### Via the tool (recommended)
+
+Ask the commander to create one for you:
+
+```
+Create a new agent called "documenter" that writes JSDoc comments for
+TypeScript functions. It should be read-only with no bash access.
+```
+
+The commander calls `create_agent`, which writes to `opencode.json`. You then need to **restart OpenCode** (or re-open the project) for the new agent to become available.
+
+```
+Create a workflow called "document" that just runs the documenter agent.
+```
+
+After reloading, `/workflow document` runs the new agent.
+
+### Manually
+
+Add an entry to the `agent` block in `opencode.json`:
+
+```json
+{
+  "agent": {
+    "documenter": {
+      "description": "Writes JSDoc comments for TypeScript functions.",
+      "mode": "subagent",
+      "prompt": "You are a documentation agent. Your only job is to add JSDoc comments to TypeScript functions...",
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      },
+      "tools": {}
+    }
+  }
+}
+```
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `mode` | `subagent` | `subagent` (called by commander) or `primary` (user-facing) |
+| `prompt` | — | System prompt. Be specific about what the agent must and must not do. |
+| `permission.edit` | `deny` | `allow` or `deny` file edits |
+| `permission.bash` | `deny` | `allow` or `deny` shell commands |
+| `model` | system default | Override with e.g. `anthropic/claude-haiku-4-5` for cheaper/faster agents |
+
+> **Note:** changes to `opencode.json` require an OpenCode restart before new agents are usable via `delegate_task`.
 
 ---
 
@@ -288,7 +353,8 @@ openflow/
 │   ├── mcp.ts                  # MCP server entry point
 │   ├── tools/
 │   │   ├── delegate-task.ts    # Core delegation tool
-│   │   └── workflow-tools.ts   # get_workflow, list_workflows
+│   │   ├── workflow-tools.ts   # get_workflow, list_workflows
+│   │   └── management-tools.ts # create_workflow, create_agent
 │   ├── config/
 │   │   ├── agent-registry.ts   # Fetches agents from OpenCode API
 │   │   └── workflow-loader.ts  # Reads + validates openflow.json
@@ -301,7 +367,8 @@ openflow/
 │   │   └── analyzer.md
 │   └── test/
 │       ├── agent-registry.test.ts
-│       └── workflow-loader.test.ts
+│       ├── workflow-loader.test.ts
+│       └── management-tools.test.ts
 ├── opencode.json               # Agent definitions + MCP + command config
 └── openflow.json               # Sample workflow definitions
 ```
