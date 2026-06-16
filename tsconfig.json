@@ -14,5 +14,5 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "exclude": ["src/proto", "node_modules", "dist"]
+  "exclude": ["src/proto", "src/test", "node_modules", "dist"]
 }

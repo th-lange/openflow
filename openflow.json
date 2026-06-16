@@ -1,0 +1,19 @@
+{
+  "workflows": {
+    "feature": {
+      "description": "Full feature development cycle: compose brief → implement → review",
+      "sequence": ["composer", "coder", "analyzer"],
+      "commanderMayAlsoUse": ["composer", "coder", "analyzer"]
+    },
+    "review": {
+      "description": "Code review only — no implementation",
+      "sequence": ["analyzer"],
+      "commanderMayAlsoUse": ["analyzer"]
+    },
+    "implement": {
+      "description": "Implement from an existing brief — skip the composer step",
+      "sequence": ["coder", "analyzer"],
+      "commanderMayAlsoUse": ["coder", "analyzer"]
+    }
+  }
+}
