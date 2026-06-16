@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
-    "proto": "node --import tsx/esm src/proto/spawn-test.ts"
+    "proto": "node --import tsx/esm src/proto/spawn-test.ts",
+    "start": "node dist/mcp.js"
   },
   "repository": {
     "type": "git",
@@ -21,7 +22,9 @@
   },
   "homepage": "https://github.com/th-lange/openflow#readme",
   "dependencies": {
-    "@opencode-ai/sdk": "^1.17.7"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opencode-ai/sdk": "^1.17.7",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

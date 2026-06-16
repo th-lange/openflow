@@ -12,16 +12,32 @@
  *   4. Do we get a clean response (no parse errors, no hang)?
  */
 
-import { createOpencodeClient, type TextPart } from "@opencode-ai/sdk";
+import { createOpencodeClient, createOpencodeServer, type TextPart } from "@opencode-ai/sdk";
 
-const SERVER_URL = process.env.OPENCODE_URL ?? "http://127.0.0.1:4096";
 const PARENT_SESSION_ID = process.env.OPENCODE_SESSION_ID;
 // This agent must exist in opencode.json under "agent"
 const TEST_AGENT = "openflow-echo";
 
 async function main() {
-  console.log(`Connecting to OpenCode at ${SERVER_URL}`);
-  const client = createOpencodeClient({ baseUrl: SERVER_URL });
+  // If OpenCode is already running (e.g. we're inside an active session), use it.
+  // Otherwise spin up a temporary server against this directory.
+  let serverUrl = process.env.OPENCODE_URL ?? "http://127.0.0.1:4096";
+  let stopServer: (() => void) | undefined;
+
+  const isRunning = await fetch(serverUrl + "/session")
+    .then(() => true)
+    .catch(() => false);
+
+  if (!isRunning) {
+    console.log("No server at", serverUrl, "— starting one...");
+    const server = await createOpencodeServer({ port: 4096 });
+    serverUrl = server.url;
+    stopServer = server.close;
+    console.log(`Server started at ${serverUrl}`);
+  }
+
+  console.log(`Connecting to OpenCode at ${serverUrl}`);
+  const client = createOpencodeClient({ baseUrl: serverUrl });
 
   // 1. Confirm connection + list available agents
   const agentsResult = await client.app.agents();
@@ -94,6 +110,7 @@ async function main() {
   // 5. Clean up
   await client.session.delete({ path: { id: sessionId } });
   console.log(`\nChild session ${sessionId} deleted.`);
+  stopServer?.();
   console.log("\nPROTOTYPE RESULT: PASS");
 }
 
