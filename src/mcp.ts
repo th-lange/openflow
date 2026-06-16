@@ -3,9 +3,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { delegateTask } from "./tools/delegate-task.js";
 import { getWorkflow, listWorkflows } from "./tools/workflow-tools.js";
+import { createWorkflow, createAgent } from "./tools/management-tools.js";
+import { createOpencodeClient } from "@opencode-ai/sdk";
 
 const SERVER_URL = process.env.OPENCODE_URL ?? "http://127.0.0.1:4096";
 const WORK_DIR = process.env.OPENCODE_CWD ?? process.cwd();
+const client = createOpencodeClient({ baseUrl: SERVER_URL });
 
 const server = new McpServer({
   name: "openflow",
@@ -65,6 +68,52 @@ server.tool(
       .map((w) => `- ${w.name}${w.description ? `: ${w.description}` : ""} (${w.sequence.join(" → ")})`)
       .join("\n");
     return { content: [{ type: "text", text }] };
+  }
+);
+
+// ── create_workflow ───────────────────────────────────────────────────────────
+
+server.tool(
+  "create_workflow",
+  "Create or update a workflow definition in openflow.json. Validates that all referenced agents exist.",
+  {
+    name: z.string().describe("Workflow identifier (used in /workflow <name>)"),
+    sequence: z.array(z.string()).describe("Ordered list of agent names to run"),
+    description: z.string().optional().describe("Short description shown by list_workflows"),
+    commanderMayAlsoUse: z.array(z.string()).optional().describe("Agents the commander may deviate to (defaults to sequence)"),
+    force: z.boolean().optional().describe("Overwrite if workflow already exists (default: false)"),
+  },
+  async ({ name, sequence, description, commanderMayAlsoUse, force }) => {
+    const result = await createWorkflow(
+      { name, sequence, description, commanderMayAlsoUse, force },
+      client,
+      WORK_DIR
+    );
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// ── create_agent ──────────────────────────────────────────────────────────────
+
+server.tool(
+  "create_agent",
+  "Create or update an agent definition in opencode.json. OpenCode must reload before the new agent is usable.",
+  {
+    name: z.string().describe("Agent identifier"),
+    prompt: z.string().describe("System prompt for the agent"),
+    description: z.string().optional().describe("Short description of the agent's role"),
+    mode: z.enum(["subagent", "primary", "all"]).optional().describe("Agent mode (default: subagent)"),
+    model: z.string().optional().describe("Model to use, e.g. anthropic/claude-sonnet-4-5"),
+    allowEdit: z.boolean().optional().describe("Allow file edits (default: false)"),
+    allowBash: z.boolean().optional().describe("Allow bash commands (default: false)"),
+    force: z.boolean().optional().describe("Overwrite if agent already exists (default: false)"),
+  },
+  async ({ name, prompt, description, mode, model, allowEdit, allowBash, force }) => {
+    const result = await createAgent(
+      { name, prompt, description, mode, model, allowEdit, allowBash, force },
+      WORK_DIR
+    );
+    return { content: [{ type: "text", text: result }] };
   }
 );
 
