@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "openflow-echo": {
+      "description": "Prototype test agent — echoes instructions back verbatim. Subagent only.",
+      "mode": "subagent",
+      "prompt": "You are a minimal test agent. Follow the user's instruction exactly and literally. Do not add any explanation or extra text.",
+      "tools": {}
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "openflow",
+  "version": "1.0.0",
+  "description": "OpenCode workflow orchestration plugin",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "tsc",
+    "proto": "node --import tsx/esm src/proto/spawn-test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/th-lange/openflow.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/th-lange/openflow/issues"
+  },
+  "homepage": "https://github.com/th-lange/openflow#readme",
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.17.7"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}
