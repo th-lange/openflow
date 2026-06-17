@@ -1,12 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { Workflow } from "../config/workflow-loader.js";
 
-export type WorkflowInfo = {
-  name: string;
-  description?: string;
-  sequence: string[];
-  commanderMayAlsoUse: string[];
-};
+export type WorkflowInfo = Workflow & { name: string };
 
 async function readOpenflowJson(directory: string): Promise<Record<string, unknown>> {
   const path = resolve(directory, "openflow.json");
@@ -24,6 +20,44 @@ async function readOpenflowJson(directory: string): Promise<Record<string, unkno
   }
 }
 
+function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
+  if (!raw || typeof raw !== "object") {
+    return { name, pattern: "sequential", sequence: [], commanderMayAlsoUse: [] };
+  }
+  const w = raw as Record<string, unknown>;
+  const pattern = (w["pattern"] as string) ?? "sequential";
+  const description = typeof w["description"] === "string" ? w["description"] : undefined;
+
+  if (pattern === "orchestrator") {
+    return {
+      name,
+      pattern: "orchestrator",
+      description,
+      agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
+      maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 6,
+      satisfactionCriteria:
+        typeof w["satisfactionCriteria"] === "string" ? w["satisfactionCriteria"] : "",
+    };
+  }
+
+  return {
+    name,
+    pattern: "sequential",
+    description,
+    sequence: Array.isArray(w["sequence"]) ? (w["sequence"] as string[]) : [],
+    commanderMayAlsoUse: Array.isArray(w["commanderMayAlsoUse"])
+      ? (w["commanderMayAlsoUse"] as string[])
+      : [],
+  };
+}
+
+export function summariseWorkflow(w: WorkflowInfo): string {
+  if (w.pattern === "orchestrator") {
+    return `orchestrator [${w.agents.join(", ")}] max=${w.maxIterations}`;
+  }
+  return w.sequence.join(" → ");
+}
+
 export async function getWorkflow(
   name: string,
   directory: string = process.cwd()
@@ -38,17 +72,7 @@ export async function getWorkflow(
     const available = Object.keys(workflows as object).join(", ");
     throw new Error(`Workflow "${name}" not found. Available: ${available || "(none)"}`);
   }
-  const w = raw as Record<string, unknown>;
-  const sequence = Array.isArray(w["sequence"]) ? (w["sequence"] as string[]) : [];
-  const mayAlsoUse = Array.isArray(w["commanderMayAlsoUse"])
-    ? (w["commanderMayAlsoUse"] as string[])
-    : [];
-  return {
-    name,
-    description: typeof w["description"] === "string" ? w["description"] : undefined,
-    sequence,
-    commanderMayAlsoUse: mayAlsoUse,
-  };
+  return parseWorkflowEntry(name, raw);
 }
 
 export async function listWorkflows(
@@ -57,16 +81,7 @@ export async function listWorkflows(
   const config = await readOpenflowJson(directory);
   const workflows = config["workflows"];
   if (!workflows || typeof workflows !== "object") return [];
-  return Object.entries(workflows as Record<string, unknown>).map(([name, raw]) => {
-    if (!raw || typeof raw !== "object") return { name, sequence: [], commanderMayAlsoUse: [] };
-    const w = raw as Record<string, unknown>;
-    return {
-      name,
-      description: typeof w["description"] === "string" ? w["description"] : undefined,
-      sequence: Array.isArray(w["sequence"]) ? (w["sequence"] as string[]) : [],
-      commanderMayAlsoUse: Array.isArray(w["commanderMayAlsoUse"])
-        ? (w["commanderMayAlsoUse"] as string[])
-        : [],
-    };
-  });
+  return Object.entries(workflows as Record<string, unknown>).map(([name, raw]) =>
+    parseWorkflowEntry(name, raw)
+  );
 }

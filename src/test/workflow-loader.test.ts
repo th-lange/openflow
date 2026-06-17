@@ -130,4 +130,118 @@ describe("workflow-loader", () => {
       }
     );
   });
+
+  it("loads a valid orchestrator workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          smart: {
+            pattern: "orchestrator",
+            agents: ["composer", "coder"],
+            maxIterations: 4,
+            satisfactionCriteria: "All done.",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["composer", "coder"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["smart"];
+        assert.equal(w.pattern, "orchestrator");
+        if (w.pattern !== "orchestrator") throw new Error("type guard");
+        assert.deepEqual(w.agents, ["composer", "coder"]);
+        assert.equal(w.maxIterations, 4);
+        assert.equal(w.satisfactionCriteria, "All done.");
+      }
+    );
+  });
+
+  it("defaults orchestrator maxIterations to 6 when omitted", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          w: {
+            pattern: "orchestrator",
+            agents: ["coder"],
+            satisfactionCriteria: "Done.",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["w"];
+        if (w.pattern !== "orchestrator") throw new Error("type guard");
+        assert.equal(w.maxIterations, 6);
+      }
+    );
+  });
+
+  it("throws on orchestrator with empty agents array", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          w: { pattern: "orchestrator", agents: [], satisfactionCriteria: "Done." },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient([]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /non-empty "agents"/
+        );
+      }
+    );
+  });
+
+  it("throws on orchestrator missing satisfactionCriteria", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "orchestrator", agents: ["coder"] } },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /satisfactionCriteria/
+        );
+      }
+    );
+  });
+
+  it("throws when orchestrator agents references unknown agent", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          w: {
+            pattern: "orchestrator",
+            agents: ["ghost"],
+            satisfactionCriteria: "Done.",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /Unknown agent "ghost"/
+        );
+      }
+    );
+  });
+
+  it("throws on unknown pattern", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "magic", sequence: ["coder"] } },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /unknown pattern/
+        );
+      }
+    );
+  });
 });

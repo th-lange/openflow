@@ -2,8 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { delegateTask } from "./tools/delegate-task.js";
-import { getWorkflow, listWorkflows } from "./tools/workflow-tools.js";
+import { getWorkflow, listWorkflows, summariseWorkflow } from "./tools/workflow-tools.js";
 import { createWorkflow, createAgent } from "./tools/management-tools.js";
+import { runSequential } from "./tools/run-workflow.js";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 
 const SERVER_URL = process.env.OPENCODE_URL ?? "http://127.0.0.1:4096";
@@ -32,11 +33,39 @@ server.tool(
   }
 );
 
+// ── run_workflow ──────────────────────────────────────────────────────────────
+
+server.tool(
+  "run_workflow",
+  "Execute a sequential workflow in code. Runs all steps in order, threads context between them, and returns the complete result. Do NOT use for orchestrator workflows — handle those yourself via delegate_task loops as instructed.",
+  {
+    name: z.string().describe("Workflow name as defined in openflow.json"),
+    prompt: z.string().describe("Task description passed through all steps"),
+    context: z.string().optional().describe("Prior context to prepend to step 1"),
+    sessionId: z.string().optional().describe("Parent session ID for step tracking"),
+  },
+  async ({ name, prompt, context, sessionId }) => {
+    const workflow = await getWorkflow(name, WORK_DIR);
+    if (workflow.pattern !== "sequential") {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Workflow "${name}" uses pattern "${workflow.pattern}" which is not code-driven. Handle it per your system instructions (e.g. orchestrator mode via delegate_task).`,
+          },
+        ],
+      };
+    }
+    const result = await runSequential(workflow, prompt, context, sessionId, SERVER_URL);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
 // ── get_workflow ──────────────────────────────────────────────────────────────
 
 server.tool(
   "get_workflow",
-  "Look up a workflow definition by name. Returns the ordered agent sequence and permitted deviations.",
+  "Look up a workflow definition by name. Returns the full config including pattern, sequence or agents, and constraints.",
   {
     name: z.string().describe("Workflow name as defined in openflow.json"),
   },
@@ -65,7 +94,10 @@ server.tool(
       return { content: [{ type: "text", text: "No workflows defined in openflow.json." }] };
     }
     const text = workflows
-      .map((w) => `- ${w.name}${w.description ? `: ${w.description}` : ""} (${w.sequence.join(" → ")})`)
+      .map(
+        (w) =>
+          `- ${w.name}${w.description ? `: ${w.description}` : ""} (${summariseWorkflow(w)})`
+      )
       .join("\n");
     return { content: [{ type: "text", text }] };
   }

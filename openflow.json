@@ -14,6 +14,13 @@
       "description": "Implement from an existing brief — skip the composer step",
       "sequence": ["coder", "analyzer"],
       "commanderMayAlsoUse": ["coder", "analyzer"]
+    },
+    "smart-dev": {
+      "description": "Dynamic development — orchestrator chooses the right agents at runtime",
+      "pattern": "orchestrator",
+      "agents": ["composer", "coder", "analyzer"],
+      "maxIterations": 6,
+      "satisfactionCriteria": "The implementation is complete and correct, and the analyzer has confirmed no issues."
     }
   }
 }
