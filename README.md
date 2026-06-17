@@ -563,6 +563,78 @@ A proposer agent makes a case; a critic agent argues against it. They alternate 
 
 ---
 
+### Pattern composition *(planned)*
+
+Any workflow can be used as a step inside another workflow. Rather than agent names only, a step in a sequence can be a workflow reference:
+
+```json
+{
+  "workflows": {
+    "feature": {
+      "pattern": "sequential",
+      "sequence": [
+        "composer",
+        { "workflow": "complexity-route" },
+        "analyzer"
+      ]
+    },
+
+    "complexity-route": {
+      "pattern": "conditional",
+      "router": "classifier",
+      "routes": [
+        { "condition": "simple",  "workflow": "quick-implement" },
+        { "condition": "complex", "workflow": "thorough-implement" }
+      ],
+      "default": "quick-implement"
+    },
+
+    "quick-implement": {
+      "pattern": "sequential",
+      "sequence": ["coder"]
+    },
+
+    "thorough-implement": {
+      "pattern": "evaluator-optimizer",
+      "producer": "coder",
+      "evaluator": "analyzer",
+      "maxIterations": 4,
+      "passCriteria": "PASS"
+    }
+  }
+}
+```
+
+`/workflow feature` resolves the composition at runtime:
+
+```mermaid
+graph TD
+    Feature["feature\n(sequential)"]
+    Composer["composer"]
+    Route["complexity-route\n(conditional)"]
+    Analyzer["analyzer"]
+    Quick["quick-implement\ncoder"]
+    Thorough["thorough-implement\nevaluator-optimizer\ncoder ⇄ analyzer"]
+
+    Feature --> Composer
+    Composer --> Route
+    Route -->|"simple"| Quick
+    Route -->|"complex"| Thorough
+    Quick --> Analyzer
+    Thorough --> Analyzer
+```
+
+**Design rules:**
+
+- `openflow.json` stays **flat** — all workflows defined at the top level, never nested in JSON
+- A step is one of: agent name (string) · workflow reference `{ "workflow": "name" }` · checkpoint `{ "checkpoint": "..." }`
+- Cycles are rejected at load time (`feature → complexity-route → feature` throws on startup, not at runtime)
+- Nested workflows govern their own deviations — `commanderMayAlsoUse` at the outer level applies only to that level's own direct steps
+
+**Good for:** sequential commander that picks a sub-pattern based on request complexity; reusing a shared review step across multiple larger workflows; quality gates that only apply to certain branches.
+
+---
+
 ## License
 
 MIT
