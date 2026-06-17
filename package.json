@@ -2,10 +2,19 @@
   "name": "openflow",
   "version": "1.0.0",
   "description": "OpenCode workflow orchestration plugin",
-  "main": "index.js",
+  "bin": {
+    "openflow": "bin/openflow.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "opencode.json",
+    "openflow.json"
+  ],
   "scripts": {
     "test": "node --import tsx/esm --test src/test/**/*.test.ts",
     "build": "tsc",
+    "prepare": "npm run build",
     "proto": "node --import tsx/esm src/proto/spawn-test.ts",
     "start": "node dist/mcp.js",
     "e2e": "node --import tsx/esm src/proto/e2e-test.ts"

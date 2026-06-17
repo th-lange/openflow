@@ -23,46 +23,39 @@ Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define na
 - Node.js 20+
 - An LLM provider configured in OpenCode
 
-### 1.1 Clone and install
+### 1.1 Install
 
+**Global (recommended):**
+```bash
+npm install -g openflow
+```
+
+**Or clone for development:**
 ```bash
 git clone https://github.com/th-lange/openflow.git
 cd openflow
 npm install
 ```
 
-### 1.2 Configure your project's `opencode.json`
+### 1.2 Configure your project
 
-In your project directory, create or update `opencode.json` with three blocks:
+In your project directory, run:
 
-**MCP server** — points OpenCode at the openflow server:
-```json
-{
-  "mcp": {
-    "openflow": {
-      "type": "local",
-      "command": ["node", "--import", "tsx/esm", "/path/to/openflow/src/mcp.ts"]
-    }
-  }
-}
+```bash
+openflow install
 ```
 
-**Slash command** — registers `/workflow`:
-```json
-{
-  "command": {
-    "workflow": {
-      "description": "Execute a named workflow, e.g. /workflow feature",
-      "agent": "commander",
-      "template": "Run workflow: {{input}}"
-    }
-  }
-}
-```
+This writes the MCP server reference, `/workflow` command, and all agent definitions into your project's `opencode.json`, creating it if it doesn't exist. Re-running is safe — existing entries are never overwritten.
 
-**Agent definitions** — copy the `agent` block from [`opencode.json`](./opencode.json) in this repo. The system prompts are long and must be included verbatim. At minimum you need `commander`; add the others for the built-in workflows to work.
+You can also target a specific directory:
+
+```bash
+openflow install /path/to/project
+```
 
 ### 1.3 Create `openflow.json` in your project
+
+Define the workflows you want:
 
 ```json
 {
