@@ -168,12 +168,14 @@ export async function getWorkflow(
 }
 
 export async function listWorkflows(
-  directory: string = process.cwd()
+  directory: string = process.cwd(),
+  includeDisabled = false
 ): Promise<WorkflowInfo[]> {
   const config = await readOpenflowJson(directory);
   const workflows = config["workflows"];
   if (!workflows || typeof workflows !== "object") return [];
-  return Object.entries(workflows as Record<string, unknown>)
-    .map(([name, raw]) => parseWorkflowEntry(name, raw))
-    .filter((w) => !w.disabled);
+  const all = Object.entries(workflows as Record<string, unknown>).map(([name, raw]) =>
+    parseWorkflowEntry(name, raw)
+  );
+  return includeDisabled ? all : all.filter((w) => !w.disabled);
 }

@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { delegateTask } from "./tools/delegate-task.js";
 import { getWorkflow, listWorkflows, summariseWorkflow } from "./tools/workflow-tools.js";
-import { createWorkflow, createAgent } from "./tools/management-tools.js";
+import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "./tools/management-tools.js";
 import { runWorkflow } from "./tools/run-workflow.js";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 
@@ -75,18 +75,20 @@ server.tool(
 
 server.tool(
   "list_workflows",
-  "List all available workflows defined in openflow.json.",
-  {},
-  async () => {
-    const workflows = await listWorkflows(WORK_DIR);
+  "List workflows defined in openflow.json. By default only enabled workflows are shown.",
+  {
+    include_disabled: z.boolean().optional().describe("Include disabled workflows in the listing (default: false)"),
+  },
+  async ({ include_disabled }) => {
+    const workflows = await listWorkflows(WORK_DIR, include_disabled ?? false);
     if (workflows.length === 0) {
       return { content: [{ type: "text", text: "No workflows defined in openflow.json." }] };
     }
     const text = workflows
-      .map(
-        (w) =>
-          `- ${w.name}${w.description ? `: ${w.description}` : ""} (${summariseWorkflow(w)})`
-      )
+      .map((w) => {
+        const tag = w.disabled ? " [disabled]" : "";
+        return `- ${w.name}${tag}${w.description ? `: ${w.description}` : ""} (${summariseWorkflow(w)})`;
+      })
       .join("\n");
     return { content: [{ type: "text", text }] };
   }
@@ -134,6 +136,34 @@ server.tool(
       { name, prompt, description, mode, model, allowEdit, allowBash, force },
       WORK_DIR
     );
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// ── enable_workflow ───────────────────────────────────────────────────────────
+
+server.tool(
+  "enable_workflow",
+  "Enable a previously disabled workflow so it appears in list_workflows and can be run.",
+  {
+    name: z.string().describe("Workflow name as defined in openflow.json"),
+  },
+  async ({ name }) => {
+    const result = await enableWorkflow(name, WORK_DIR);
+    return { content: [{ type: "text", text: result }] };
+  }
+);
+
+// ── disable_workflow ──────────────────────────────────────────────────────────
+
+server.tool(
+  "disable_workflow",
+  "Disable a workflow so it is hidden from list_workflows and cannot be run. The definition is preserved and can be re-enabled later.",
+  {
+    name: z.string().describe("Workflow name as defined in openflow.json"),
+  },
+  async ({ name }) => {
+    const result = await disableWorkflow(name, WORK_DIR);
     return { content: [{ type: "text", text: result }] };
   }
 );

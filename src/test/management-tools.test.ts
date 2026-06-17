@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createWorkflow, createAgent } from "../tools/management-tools.js";
+import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "../tools/management-tools.js";
 import { clearAgentCache } from "../config/agent-registry.js";
 import type { OpencodeClient } from "@opencode-ai/sdk";
 
@@ -168,5 +168,73 @@ describe("create_agent", () => {
     const json = JSON.parse(await readFile(join(dir, "opencode.json"), "utf-8"));
     assert.ok(json.agent.a);
     assert.ok(json.agent.b);
+  });
+});
+
+// ── enable_workflow / disable_workflow ────────────────────────────────────────
+
+describe("disable_workflow", () => {
+  afterEach(teardown);
+
+  it("sets disabled=true on the workflow", async () => {
+    const dir = await setup();
+    const client = makeClient(["coder"]);
+    await createWorkflow({ name: "w", sequence: ["coder"] }, client, dir);
+    await disableWorkflow("w", dir);
+    const json = JSON.parse(await readFile(join(dir, "openflow.json"), "utf-8"));
+    assert.equal(json.workflows.w.disabled, true);
+  });
+
+  it("is idempotent when workflow is already disabled", async () => {
+    const dir = await setup();
+    const client = makeClient(["coder"]);
+    await createWorkflow({ name: "w", sequence: ["coder"] }, client, dir);
+    await disableWorkflow("w", dir);
+    await disableWorkflow("w", dir);
+    const json = JSON.parse(await readFile(join(dir, "openflow.json"), "utf-8"));
+    assert.equal(json.workflows.w.disabled, true);
+  });
+
+  it("throws when workflow does not exist", async () => {
+    const dir = await setup();
+    await assert.rejects(() => disableWorkflow("ghost", dir), /not found/);
+  });
+
+  it("preserves other workflow fields", async () => {
+    const dir = await setup();
+    const client = makeClient(["coder", "analyzer"]);
+    await createWorkflow({ name: "w", sequence: ["coder"], description: "my workflow" }, client, dir);
+    await disableWorkflow("w", dir);
+    const json = JSON.parse(await readFile(join(dir, "openflow.json"), "utf-8"));
+    assert.equal(json.workflows.w.description, "my workflow");
+    assert.deepEqual(json.workflows.w.sequence, ["coder"]);
+  });
+});
+
+describe("enable_workflow", () => {
+  afterEach(teardown);
+
+  it("removes the disabled flag", async () => {
+    const dir = await setup();
+    const client = makeClient(["coder"]);
+    await createWorkflow({ name: "w", sequence: ["coder"] }, client, dir);
+    await disableWorkflow("w", dir);
+    await enableWorkflow("w", dir);
+    const json = JSON.parse(await readFile(join(dir, "openflow.json"), "utf-8"));
+    assert.equal(json.workflows.w.disabled, undefined);
+  });
+
+  it("is idempotent when workflow is already enabled", async () => {
+    const dir = await setup();
+    const client = makeClient(["coder"]);
+    await createWorkflow({ name: "w", sequence: ["coder"] }, client, dir);
+    await enableWorkflow("w", dir);
+    const json = JSON.parse(await readFile(join(dir, "openflow.json"), "utf-8"));
+    assert.equal(json.workflows.w.disabled, undefined);
+  });
+
+  it("throws when workflow does not exist", async () => {
+    const dir = await setup();
+    await assert.rejects(() => enableWorkflow("ghost", dir), /not found/);
   });
 });

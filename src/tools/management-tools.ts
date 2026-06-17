@@ -79,6 +79,45 @@ export async function createWorkflow(
   ].join("\n");
 }
 
+// ── enable_workflow / disable_workflow ────────────────────────────────────────
+
+async function setWorkflowDisabled(
+  name: string,
+  disabled: boolean,
+  directory: string
+): Promise<string> {
+  if (!name.trim()) throw new Error("Workflow name must not be empty");
+
+  const path = resolve(directory, "openflow.json");
+  const config = await readJson(path);
+  const workflows = (config["workflows"] ?? {}) as Record<string, unknown>;
+
+  if (!workflows[name]) {
+    throw new Error(`Workflow "${name}" not found in openflow.json`);
+  }
+
+  const entry = workflows[name] as Record<string, unknown>;
+  if (disabled) {
+    entry["disabled"] = true;
+  } else {
+    delete entry["disabled"];
+  }
+
+  config["workflows"] = { ...workflows, [name]: entry };
+  await writeJson(path, config);
+
+  const state = disabled ? "disabled" : "enabled";
+  return `Workflow "${name}" is now ${state}.`;
+}
+
+export async function enableWorkflow(name: string, directory: string = process.cwd()): Promise<string> {
+  return setWorkflowDisabled(name, false, directory);
+}
+
+export async function disableWorkflow(name: string, directory: string = process.cwd()): Promise<string> {
+  return setWorkflowDisabled(name, true, directory);
+}
+
 // ── create_agent ──────────────────────────────────────────────────────────────
 
 export type CreateAgentInput = {
