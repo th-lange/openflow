@@ -15,6 +15,25 @@
       "sequence": ["coder", "analyzer"],
       "commanderMayAlsoUse": ["coder", "analyzer"]
     },
+    "quality-implement": {
+      "description": "Implement with quality gate — coder iterates until analyzer approves",
+      "pattern": "evaluator-optimizer",
+      "producer": "coder",
+      "evaluator": "analyzer",
+      "maxIterations": 3,
+      "passCriteria": "PASS"
+    },
+    "auto-route": {
+      "description": "Auto-route: composer classifies the request and dispatches to the right workflow",
+      "pattern": "conditional",
+      "router": "composer",
+      "routes": [
+        { "condition": "bug",     "workflow": "implement" },
+        { "condition": "feature", "workflow": "feature" },
+        { "condition": "review",  "workflow": "review" }
+      ],
+      "default": "feature"
+    },
     "smart-dev": {
       "description": "Dynamic development — orchestrator chooses the right agents at runtime",
       "pattern": "orchestrator",

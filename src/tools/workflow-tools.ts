@@ -14,7 +14,7 @@ async function readOpenflowJson(directory: string): Promise<Record<string, unkno
   }
   try {
     const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null ? parsed as Record<string, unknown> : {};
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   } catch {
     throw new Error("openflow.json is not valid JSON");
   }
@@ -40,6 +40,36 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
     };
   }
 
+  if (pattern === "evaluator-optimizer") {
+    return {
+      name,
+      pattern: "evaluator-optimizer",
+      description,
+      producer: typeof w["producer"] === "string" ? w["producer"] : "",
+      evaluator: typeof w["evaluator"] === "string" ? w["evaluator"] : "",
+      maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 3,
+      passCriteria: typeof w["passCriteria"] === "string" ? w["passCriteria"] : "PASS",
+    };
+  }
+
+  if (pattern === "conditional") {
+    const routes = Array.isArray(w["routes"])
+      ? (w["routes"] as Array<Record<string, unknown>>).map((r) => ({
+          condition: typeof r["condition"] === "string" ? r["condition"] : "",
+          workflow: typeof r["workflow"] === "string" ? r["workflow"] : "",
+        }))
+      : [];
+    return {
+      name,
+      pattern: "conditional",
+      description,
+      router: typeof w["router"] === "string" ? w["router"] : "",
+      routes,
+      default: typeof w["default"] === "string" ? w["default"] : "",
+    };
+  }
+
+  // Default: sequential
   return {
     name,
     pattern: "sequential",
@@ -52,10 +82,16 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
 }
 
 export function summariseWorkflow(w: WorkflowInfo): string {
-  if (w.pattern === "orchestrator") {
-    return `orchestrator [${w.agents.join(", ")}] max=${w.maxIterations}`;
+  switch (w.pattern) {
+    case "sequential":
+      return w.sequence.join(" → ");
+    case "orchestrator":
+      return `orchestrator [${w.agents.join(", ")}] max=${w.maxIterations}`;
+    case "evaluator-optimizer":
+      return `${w.producer} ⇄ ${w.evaluator} (max ${w.maxIterations} iter)`;
+    case "conditional":
+      return `${w.router} → [${w.routes.map((r) => r.condition).join(" | ")}]`;
   }
-  return w.sequence.join(" → ");
 }
 
 export async function getWorkflow(

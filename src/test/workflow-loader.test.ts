@@ -230,6 +230,182 @@ describe("workflow-loader", () => {
     );
   });
 
+  // ── evaluator-optimizer ────────────────────────────────────────────────────
+
+  it("loads a valid evaluator-optimizer workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          qual: {
+            pattern: "evaluator-optimizer",
+            producer: "coder",
+            evaluator: "analyzer",
+            maxIterations: 2,
+            passCriteria: "PASS",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "analyzer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["qual"];
+        assert.equal(w.pattern, "evaluator-optimizer");
+        if (w.pattern !== "evaluator-optimizer") throw new Error("type guard");
+        assert.equal(w.producer, "coder");
+        assert.equal(w.evaluator, "analyzer");
+        assert.equal(w.maxIterations, 2);
+        assert.equal(w.passCriteria, "PASS");
+      }
+    );
+  });
+
+  it("defaults evaluator-optimizer maxIterations to 3 and passCriteria to PASS", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          w: { pattern: "evaluator-optimizer", producer: "coder", evaluator: "analyzer" },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "analyzer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["w"];
+        if (w.pattern !== "evaluator-optimizer") throw new Error("type guard");
+        assert.equal(w.maxIterations, 3);
+        assert.equal(w.passCriteria, "PASS");
+      }
+    );
+  });
+
+  it("throws on evaluator-optimizer missing producer", async () => {
+    await withFixture(
+      JSON.stringify({ workflows: { w: { pattern: "evaluator-optimizer", evaluator: "analyzer" } } }),
+      async (dir) => {
+        const client = makeClient(["analyzer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /producer/);
+      }
+    );
+  });
+
+  it("throws on evaluator-optimizer missing evaluator", async () => {
+    await withFixture(
+      JSON.stringify({ workflows: { w: { pattern: "evaluator-optimizer", producer: "coder" } } }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /evaluator/);
+      }
+    );
+  });
+
+  it("throws when evaluator-optimizer references unknown agent", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "evaluator-optimizer", producer: "ghost", evaluator: "analyzer" } },
+      }),
+      async (dir) => {
+        const client = makeClient(["analyzer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /Unknown agent "ghost"/);
+      }
+    );
+  });
+
+  // ── conditional ────────────────────────────────────────────────────────────
+
+  it("loads a valid conditional workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          base: { sequence: ["coder"], commanderMayAlsoUse: [] },
+          route: {
+            pattern: "conditional",
+            router: "composer",
+            routes: [{ condition: "bug", workflow: "base" }],
+            default: "base",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "composer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["route"];
+        assert.equal(w.pattern, "conditional");
+        if (w.pattern !== "conditional") throw new Error("type guard");
+        assert.equal(w.router, "composer");
+        assert.deepEqual(w.routes, [{ condition: "bug", workflow: "base" }]);
+        assert.equal(w.default, "base");
+      }
+    );
+  });
+
+  it("throws on conditional missing router", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          base: { sequence: ["coder"] },
+          w: { pattern: "conditional", routes: [{ condition: "x", workflow: "base" }], default: "base" },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /router/);
+      }
+    );
+  });
+
+  it("throws on conditional with empty routes array", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          base: { sequence: ["coder"] },
+          w: { pattern: "conditional", router: "composer", routes: [], default: "base" },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "composer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /non-empty "routes"/);
+      }
+    );
+  });
+
+  it("throws when conditional route references unknown workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          w: {
+            pattern: "conditional",
+            router: "composer",
+            routes: [{ condition: "x", workflow: "ghost" }],
+            default: "ghost",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["composer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /unknown workflow "ghost"/);
+      }
+    );
+  });
+
+  it("throws when conditional default references unknown workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          base: { sequence: ["coder"] },
+          w: {
+            pattern: "conditional",
+            router: "composer",
+            routes: [{ condition: "x", workflow: "base" }],
+            default: "ghost",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "composer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /unknown workflow "ghost"/);
+      }
+    );
+  });
+
   it("throws on unknown pattern", async () => {
     await withFixture(
       JSON.stringify({

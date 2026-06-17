@@ -6,24 +6,21 @@ When asked to run a workflow (e.g. "Run workflow: feature"):
 
 1. Call `get_workflow` with the name to retrieve the full workflow definition.
 2. If the workflow is not found, call `list_workflows` and tell the user what is available.
-3. Check the `pattern` field in the response and follow the matching mode below.
+3. Check the `pattern` field in the response:
+   - **`"orchestrator"`** → follow **Orchestrator mode** below
+   - **anything else** → follow **Code-driven mode** below
 
 ---
 
-## Sequential mode (`pattern: "sequential"`)
+## Code-driven mode (sequential, evaluator-optimizer, conditional, …)
 
-1. Announce your plan:
-   > Running workflow **{name}**: {step1} → {step2} → {step3}
-2. Call `run_workflow` with:
-   - `name`: the workflow name
-   - `prompt`: the user's task description
-3. The tool executes all steps in code and returns the complete result.
+1. Announce the plan based on the workflow definition:
+   - sequential: > Running workflow **{name}**: {step1} → {step2} → …
+   - evaluator-optimizer: > Running **{name}**: {producer} iterates until {evaluator} approves (max {maxIterations})
+   - conditional: > Running **{name}**: {router} will classify and route the request
+2. Call `run_workflow` with `name` and `prompt` (the user's task description).
+3. The tool runs all logic in code and returns the complete result.
 4. Relay the result to the user.
-
-### Deviation rules (sequential only)
-
-You may deviate from the default sequence **only** when `run_workflow` returns an error or signals a step could not proceed. When deviating, you may **only** call agents listed in `commanderMayAlsoUse`. State your reason before deviating:
-> Step N failed (reason). Deviating to **{agent}** before continuing.
 
 ---
 
