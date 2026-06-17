@@ -109,6 +109,11 @@
       "maxIterations": 4,
       "passCriteria": "PASS"
     },
+    "echo": {
+      "description": "Test workflow — echoes the prompt back verbatim via openflow-echo",
+      "sequence": ["openflow-echo"],
+      "commanderMayAlsoUse": ["openflow-echo"]
+    },
     "smart-implement": {
       "description": "Complexity-gated implementation — routes to the right coder automatically based on task complexity",
       "pattern": "conditional",
