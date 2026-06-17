@@ -31,17 +31,36 @@ async function resolveConfigPath(dir) {
   return { read: jsonPath, write: jsonPath }; // neither exists — create .json
 }
 
-// Strip // and /* */ comments so we can JSON.parse a .jsonc file
-function stripJsoncComments(src) {
-  return src
-    .replace(/\/\/[^\n]*/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "");
+// Parse JSONC: strip // and /* */ comments (skipping string literals), remove trailing commas
+function normalizeJsonc(src) {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    if (src[i] === '"') {
+      // String literal — copy verbatim so // inside URLs is preserved
+      out += src[i++];
+      while (i < src.length) {
+        if (src[i] === "\\") { out += src[i] + (src[i + 1] ?? ""); i += 2; }
+        else if (src[i] === '"') { out += src[i++]; break; }
+        else { out += src[i++]; }
+      }
+    } else if (src[i] === "/" && src[i + 1] === "/") {
+      while (i < src.length && src[i] !== "\n") i++;
+    } else if (src[i] === "/" && src[i + 1] === "*") {
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++;
+      i += 2;
+    } else {
+      out += src[i++];
+    }
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1");
 }
 
 async function readConfig(path) {
   try {
     const raw = await readFile(path, "utf-8");
-    const text = path.endsWith(".jsonc") ? stripJsoncComments(raw) : raw;
+    const text = path.endsWith(".jsonc") ? normalizeJsonc(raw) : raw;
     return JSON.parse(text);
   } catch (e) {
     if (e.code === "ENOENT") return {};
@@ -56,7 +75,7 @@ async function writeJson(path, data) {
 
 async function install(targetDir) {
   const dir = targetDir ?? openCodeGlobalDir();
-  const { read, write, hadJsonc } = await resolveConfigPath(dir);
+  const { read, write } = await resolveConfigPath(dir);
 
   console.log(`  Target: ${write}`);
 
