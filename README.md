@@ -1,5 +1,8 @@
 # openflow
 
+> ⚠️ **BETA — IN ACTIVE DEVELOPMENT**
+> This project is experimental. APIs, config formats, and agent behaviour will change between versions. Not recommended for production use. Feedback and issues welcome.
+
 Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define named sequences of specialised agents — composer, coder, analyzer — and run them with a single slash command. Each agent hands off structured output to the next; nothing falls through the cracks.
 
 ```
@@ -393,6 +396,170 @@ Removed stale inline comment.
 ```
 
 This means the analyzer sees both the original brief and exactly what the coder did — without the commander having to summarise or transform anything manually.
+
+---
+
+## Roadmap — agentic patterns
+
+> The following patterns are **in development**. The current release only supports the sequential pipeline. These will each add a `pattern` field to workflow definitions.
+
+The core insight: a workflow's `sequence` field today implies a fixed linear pipeline. Adding `pattern` unlocks fundamentally different coordination strategies between agents.
+
+---
+
+### Sequential pipeline *(current)*
+
+```json
+{ "pattern": "sequential", "sequence": ["composer", "coder", "analyzer"] }
+```
+
+Fixed order. Each step receives the prior step's output as context. This is the only pattern available today.
+
+---
+
+### Orchestrator
+
+```json
+{
+  "pattern": "orchestrator",
+  "agents": ["composer", "coder", "analyzer", "debugger"],
+  "maxIterations": 6,
+  "satisfactionCriteria": "The task is complete and all acceptance criteria are met."
+}
+```
+
+A dedicated orchestrator agent receives the task and dynamically decides which agent to call next based on the current state. It keeps delegating until its own satisfaction check passes or `maxIterations` is reached. Unlike sequential, the order is not fixed — the orchestrator decides at runtime.
+
+**Good for:** tasks where the right sequence can't be known upfront; research-then-implement workflows; agents that may need to be called more than once.
+
+**Implementation:** The orchestrator is itself an agent with `delegate_task` access. The MCP server adds a loop guard (`maxIterations`) and injects the satisfaction check as a required final step before the orchestrator can return.
+
+---
+
+### Fan-out / Best-of-N
+
+```json
+{
+  "pattern": "fanout",
+  "agents": ["coder", "coder", "coder"],
+  "picker": "analyzer",
+  "pickerPrompt": "Select the implementation with the best code quality, clarity, and minimal surface area."
+}
+```
+
+The same task is dispatched to N agents (potentially the same agent type run N times, or N different specialists). A picker agent receives all results and selects the best one. The winning result is returned as the workflow output.
+
+**Good for:** code generation where quality matters (get 3 implementations, keep the cleanest); architecture proposals; any task where you want diversity of output before committing.
+
+**Implementation:** `delegate_task` is called N times (in parallel via `Promise.all`). All results are bundled and sent to the picker agent. The picker's selection is the final output.
+
+---
+
+### Evaluator-Optimizer loop
+
+```json
+{
+  "pattern": "evaluator-optimizer",
+  "producer": "coder",
+  "evaluator": "analyzer",
+  "maxIterations": 4,
+  "passCriteria": "PASS"
+}
+```
+
+The producer generates output; the evaluator scores it. If the evaluator's verdict doesn't match `passCriteria`, the producer is called again with the evaluator's feedback as context. Loops until the criteria is met or `maxIterations` is exhausted.
+
+**Good for:** code quality enforcement; test coverage; any task with a clear binary pass/fail criterion that an agent can evaluate.
+
+**Implementation:** New `evaluatorOptimizerLoop` in the MCP server. Each iteration passes the previous evaluator feedback to the producer via the `context` field. On FAIL the loop continues; on PASS or max iterations it exits and returns the last producer output.
+
+---
+
+### Parallel / Map-Reduce
+
+```json
+{
+  "pattern": "parallel",
+  "subtasks": [
+    { "agent": "frontend-coder", "prompt": "Implement the UI component" },
+    { "agent": "backend-coder",  "prompt": "Implement the API endpoint" },
+    { "agent": "db-coder",       "prompt": "Write the migration" }
+  ],
+  "merger": "composer"
+}
+```
+
+The task is split into N independent subtasks, each dispatched to a specialist agent simultaneously. A merger agent consolidates the results into a coherent whole.
+
+**Good for:** large features spanning multiple layers (frontend + backend + DB); reviewing multiple files independently; parallelising any set of work that has no inter-dependency.
+
+**Implementation:** Subtask `delegate_task` calls run concurrently via `Promise.all`. The merger receives all outputs as structured context. The split can be defined statically in config or dynamically by a splitter agent.
+
+---
+
+### Conditional branching
+
+```json
+{
+  "pattern": "conditional",
+  "router": "classifier",
+  "routes": [
+    { "condition": "bug",          "workflow": "debug" },
+    { "condition": "feature",      "workflow": "feature" },
+    { "condition": "refactor",     "workflow": "implement" }
+  ],
+  "default": "feature"
+}
+```
+
+A router agent classifies the incoming request and dispatches to the matching workflow. Routes map condition labels to existing workflow names.
+
+**Good for:** heterogeneous task queues where you don't want to pre-specify the workflow; teams that want a single entry point that self-routes; catch-all "do the right thing" commands.
+
+**Implementation:** The router agent is called first, asked to return one of the condition labels as structured output. The MCP server reads the label, looks up the target workflow, and executes it. Falls back to `default` if no route matches.
+
+---
+
+### Human checkpoint
+
+```json
+{
+  "pattern": "sequential",
+  "sequence": [
+    "composer",
+    { "checkpoint": "Review the brief above and confirm before implementation begins." },
+    "coder",
+    { "checkpoint": "Review the diff above before the analyzer runs." },
+    "analyzer"
+  ]
+}
+```
+
+Designated steps in the sequence pause and surface a message to the user. Execution resumes only after the user explicitly continues (or can be cancelled).
+
+**Good for:** sensitive operations (schema migrations, deploys, destructive changes); any workflow where human sign-off before a point of no return is required; keeping a human in the loop without abandoning automation.
+
+**Implementation:** Checkpoint steps are not agent calls — they emit a structured pause event to the OpenCode session, which surfaces to the user as an interactive prompt. The MCP server holds the workflow state until the user responds.
+
+---
+
+### Debate / Adversarial
+
+```json
+{
+  "pattern": "debate",
+  "proposer": "architect",
+  "critic": "security-reviewer",
+  "rounds": 2,
+  "judge": "analyzer"
+}
+```
+
+A proposer agent makes a case; a critic agent argues against it. They alternate for `rounds` turns, each seeing the other's arguments. A judge agent reviews the full transcript and delivers a verdict.
+
+**Good for:** architecture decisions with real tradeoffs; security review of a proposed design; any decision where you want a structured devil's advocate before committing.
+
+**Implementation:** Proposer and critic take turns via `delegate_task`, each receiving the full prior debate as context. After `rounds` exchanges the judge receives the entire transcript and returns a decision with reasoning.
 
 ---
 
