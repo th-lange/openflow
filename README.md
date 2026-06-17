@@ -630,6 +630,7 @@ graph TD
 - A step is one of: agent name (string) · workflow reference `{ "workflow": "name" }` · checkpoint `{ "checkpoint": "..." }`
 - Cycles are rejected at load time (`feature → complexity-route → feature` throws on startup, not at runtime)
 - Nested workflows govern their own deviations — `commanderMayAlsoUse` at the outer level applies only to that level's own direct steps
+- A workflow containing a `{ "checkpoint" }` step cannot be referenced by another workflow. Checkpoints need to pause for the user, which only the top-level commander can do — a referenced sub-workflow runs in code and can't pause. Put the checkpoint in the hosting (top-level) sequence instead; the heavy sub-pattern it gates stays a checkpoint-free reference. This is enforced at load time.
 
 **Good for:** sequential commander that picks a sub-pattern based on request complexity; reusing a shared review step across multiple larger workflows; quality gates that only apply to certain branches.
 
