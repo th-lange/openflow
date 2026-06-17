@@ -25,12 +25,6 @@ Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define na
 
 ### 1.1 Install
 
-**From GitHub:**
-```bash
-npm install -g github:th-lange/openflow
-```
-
-**Or clone for development:**
 ```bash
 git clone https://github.com/th-lange/openflow.git
 cd openflow
