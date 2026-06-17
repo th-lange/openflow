@@ -98,16 +98,19 @@ async function install(targetDir) {
     console.log("  · MCP server already configured — skipping");
   }
 
-  // ── /workflow command ────────────────────────────────────────────────────────
-  const command = config.command ?? {};
-  if (!command.workflow) {
-    command.workflow = {
-      description: "Execute a named workflow, e.g. /workflow feature",
-      agent: "commander",
-      template: "Run workflow: {{input}}",
-    };
-    config.command = command;
-    changed = true;
+  // ── /workflow slash command ──────────────────────────────────────────────────
+  // OpenCode loads slash commands from markdown files in <config>/commands/
+  const workflowCmd = resolve(dir, "commands", "workflow.md");
+  if (!(await fileExists(workflowCmd))) {
+    const cmdBody = [
+      "---",
+      "description: Run a named openflow workflow, e.g. /workflow feature",
+      "---",
+      "Run workflow: $ARGUMENTS",
+      "",
+    ].join("\n");
+    await mkdir(dirname(workflowCmd), { recursive: true });
+    await writeFile(workflowCmd, cmdBody, "utf-8");
     console.log("  ✓ /workflow command registered");
   } else {
     console.log("  · /workflow command already configured — skipping");

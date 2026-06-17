@@ -25,9 +25,9 @@ Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define na
 
 ### 1.1 Install
 
-**Global (recommended):**
+**From GitHub:**
 ```bash
-npm install -g openflow
+npm install -g github:th-lange/openflow
 ```
 
 **Or clone for development:**
@@ -35,6 +35,7 @@ npm install -g openflow
 git clone https://github.com/th-lange/openflow.git
 cd openflow
 npm install
+npm link
 ```
 
 ### 1.2 Configure your project
@@ -45,7 +46,7 @@ Run in any directory:
 openflow install
 ```
 
-With no argument, this installs into OpenCode's global config (`~/.config/opencode/opencode.json`, or `%APPDATA%\opencode` on Windows), so the openflow tools and agents are available in every project automatically.
+With no argument, this installs into OpenCode's global config dir (`~/.config/opencode/` on Linux/Mac, `%APPDATA%\opencode` on Windows), so the openflow tools and agents are available in every project automatically.
 
 To install into a specific project instead:
 
@@ -53,7 +54,7 @@ To install into a specific project instead:
 openflow install /path/to/project
 ```
 
-Either way, the command writes the MCP server reference, `/workflow` command, and all agent definitions. Re-running is safe — existing entries are never overwritten.
+Either way, the command writes the MCP server entry and agents to `opencode.jsonc` / `opencode.json`, and adds a `commands/workflow.md` file that registers the `/workflow` slash command. Re-running is safe — existing entries are never overwritten.
 
 ### 1.3 Create `openflow.json` in your project
 
@@ -79,13 +80,17 @@ See [Configuration](#3-configuration) for all patterns and [Options](#4-options)
 opencode
 ```
 
-OpenCode loads the MCP server on startup. Eight tools become available to the commander: `delegate_task`, `run_workflow`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
+OpenCode loads the MCP server on startup. Eight tools become available: `delegate_task`, `run_workflow`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
+
+The `/workflow` slash command sends "Run workflow: \<name\>" to whichever agent is active in the session — use the `commander` agent for it to work correctly.
 
 ---
 
 ## 2. Usage
 
 ### Run a workflow
+
+Start OpenCode with the `commander` agent and use the `/workflow` slash command:
 
 ```
 /workflow feature
@@ -106,7 +111,7 @@ It should return null instead.
 /workflow
 ```
 
-The commander calls `list_workflows` and displays what's defined in `openflow.json`. Disabled workflows are not shown by default — ask to include them to see the full list.
+With no workflow name, the commander calls `list_workflows` and displays what's defined in `openflow.json`. Disabled workflows are not shown by default — ask to include them to see the full list.
 
 ### Create a workflow
 
