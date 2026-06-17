@@ -102,6 +102,19 @@ server.tool("disable_workflow", "Disable a workflow so it is hidden from list_wo
     const result = await disableWorkflow(name, WORK_DIR);
     return { content: [{ type: "text", text: result }] };
 });
+// ── debug_info (temporary — remove once OPENCODE_URL is confirmed) ────────────
+server.tool("debug_info", "Return openflow runtime info — SERVER_URL, WORK_DIR, and all OPENCODE_* env vars. Use this to diagnose connectivity issues.", {}, async () => {
+    const opencodeEnv = Object.entries(process.env)
+        .filter(([k]) => k.startsWith("OPENCODE"))
+        .map(([k, v]) => `  ${k}=${v}`)
+        .join("\n") || "  (none)";
+    return {
+        content: [{
+                type: "text",
+                text: `SERVER_URL: ${SERVER_URL}\nWORK_DIR: ${WORK_DIR}\nOPENCODE_* env vars:\n${opencodeEnv}`,
+            }],
+    };
+});
 // ── Start ─────────────────────────────────────────────────────────────────────
 const transport = new StdioServerTransport();
 await server.connect(transport);
