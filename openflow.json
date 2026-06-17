@@ -15,6 +15,17 @@
       "sequence": ["coder", "analyzer"],
       "commanderMayAlsoUse": ["coder", "analyzer"]
     },
+    "guarded-feature": {
+      "description": "Feature development with human approval checkpoints",
+      "sequence": [
+        "composer",
+        { "checkpoint": "Review the task brief above and confirm before implementation begins." },
+        "coder",
+        { "checkpoint": "Review the diff above before the analyzer runs." },
+        "analyzer"
+      ],
+      "commanderMayAlsoUse": ["composer", "coder", "analyzer"]
+    },
     "quality-implement": {
       "description": "Implement with quality gate — coder iterates until analyzer approves",
       "pattern": "evaluator-optimizer",
@@ -33,6 +44,31 @@
         { "condition": "review",  "workflow": "review" }
       ],
       "default": "feature"
+    },
+    "best-of-3": {
+      "description": "Get 3 independent implementations and pick the best one",
+      "pattern": "fanout",
+      "agents": ["coder", "coder", "coder"],
+      "picker": "analyzer",
+      "pickerPrompt": "Select the implementation with the best code quality, correctness, and minimal surface area."
+    },
+    "parallel-review": {
+      "description": "Run three specialised review passes in parallel and consolidate",
+      "pattern": "parallel",
+      "subtasks": [
+        { "agent": "analyzer", "prompt": "Review the code for correctness and logic errors." },
+        { "agent": "analyzer", "prompt": "Review the code for security issues and vulnerabilities." },
+        { "agent": "analyzer", "prompt": "Review the code for performance and readability." }
+      ],
+      "merger": "composer"
+    },
+    "arch-debate": {
+      "description": "Architecture decision: proposer vs critic, analyst judges",
+      "pattern": "debate",
+      "proposer": "composer",
+      "critic": "analyzer",
+      "rounds": 2,
+      "judge": "analyzer"
     },
     "smart-dev": {
       "description": "Dynamic development — orchestrator chooses the right agents at runtime",

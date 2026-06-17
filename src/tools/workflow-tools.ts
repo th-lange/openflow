@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { Workflow } from "../config/workflow-loader.js";
+import type { Workflow, SequenceStep } from "../config/workflow-loader.js";
 
 export type WorkflowInfo = Workflow & { name: string };
 
@@ -20,6 +20,18 @@ async function readOpenflowJson(directory: string): Promise<Record<string, unkno
   }
 }
 
+function parseSequenceStep(item: unknown): SequenceStep {
+  if (typeof item === "string") return item;
+  if (
+    typeof item === "object" &&
+    item !== null &&
+    typeof (item as Record<string, unknown>)["checkpoint"] === "string"
+  ) {
+    return { checkpoint: (item as Record<string, unknown>)["checkpoint"] as string };
+  }
+  return String(item);
+}
+
 function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
   if (!raw || typeof raw !== "object") {
     return { name, pattern: "sequential", sequence: [], commanderMayAlsoUse: [] };
@@ -28,69 +40,101 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
   const pattern = (w["pattern"] as string) ?? "sequential";
   const description = typeof w["description"] === "string" ? w["description"] : undefined;
 
-  if (pattern === "orchestrator") {
-    return {
-      name,
-      pattern: "orchestrator",
-      description,
-      agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
-      maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 6,
-      satisfactionCriteria:
-        typeof w["satisfactionCriteria"] === "string" ? w["satisfactionCriteria"] : "",
-    };
-  }
+  switch (pattern) {
+    case "orchestrator":
+      return {
+        name, pattern: "orchestrator", description,
+        agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
+        maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 6,
+        satisfactionCriteria: typeof w["satisfactionCriteria"] === "string" ? w["satisfactionCriteria"] : "",
+      };
 
-  if (pattern === "evaluator-optimizer") {
-    return {
-      name,
-      pattern: "evaluator-optimizer",
-      description,
-      producer: typeof w["producer"] === "string" ? w["producer"] : "",
-      evaluator: typeof w["evaluator"] === "string" ? w["evaluator"] : "",
-      maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 3,
-      passCriteria: typeof w["passCriteria"] === "string" ? w["passCriteria"] : "PASS",
-    };
-  }
+    case "evaluator-optimizer":
+      return {
+        name, pattern: "evaluator-optimizer", description,
+        producer: typeof w["producer"] === "string" ? w["producer"] : "",
+        evaluator: typeof w["evaluator"] === "string" ? w["evaluator"] : "",
+        maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 3,
+        passCriteria: typeof w["passCriteria"] === "string" ? w["passCriteria"] : "PASS",
+      };
 
-  if (pattern === "conditional") {
-    const routes = Array.isArray(w["routes"])
-      ? (w["routes"] as Array<Record<string, unknown>>).map((r) => ({
-          condition: typeof r["condition"] === "string" ? r["condition"] : "",
-          workflow: typeof r["workflow"] === "string" ? r["workflow"] : "",
-        }))
-      : [];
-    return {
-      name,
-      pattern: "conditional",
-      description,
-      router: typeof w["router"] === "string" ? w["router"] : "",
-      routes,
-      default: typeof w["default"] === "string" ? w["default"] : "",
-    };
-  }
+    case "conditional": {
+      const routes = Array.isArray(w["routes"])
+        ? (w["routes"] as Array<Record<string, unknown>>).map((r) => ({
+            condition: typeof r["condition"] === "string" ? r["condition"] : "",
+            workflow: typeof r["workflow"] === "string" ? r["workflow"] : "",
+          }))
+        : [];
+      return {
+        name, pattern: "conditional", description,
+        router: typeof w["router"] === "string" ? w["router"] : "",
+        routes,
+        default: typeof w["default"] === "string" ? w["default"] : "",
+      };
+    }
 
-  // Default: sequential
-  return {
-    name,
-    pattern: "sequential",
-    description,
-    sequence: Array.isArray(w["sequence"]) ? (w["sequence"] as string[]) : [],
-    commanderMayAlsoUse: Array.isArray(w["commanderMayAlsoUse"])
-      ? (w["commanderMayAlsoUse"] as string[])
-      : [],
-  };
+    case "fanout":
+      return {
+        name, pattern: "fanout", description,
+        agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
+        picker: typeof w["picker"] === "string" ? w["picker"] : "",
+        pickerPrompt: typeof w["pickerPrompt"] === "string" ? w["pickerPrompt"] : undefined,
+      };
+
+    case "parallel": {
+      const subtasks = Array.isArray(w["subtasks"])
+        ? (w["subtasks"] as Array<Record<string, unknown>>).map((s) => ({
+            agent: typeof s["agent"] === "string" ? s["agent"] : "",
+            prompt: typeof s["prompt"] === "string" ? s["prompt"] : "",
+          }))
+        : [];
+      return {
+        name, pattern: "parallel", description,
+        subtasks,
+        merger: typeof w["merger"] === "string" ? w["merger"] : "",
+      };
+    }
+
+    case "debate":
+      return {
+        name, pattern: "debate", description,
+        proposer: typeof w["proposer"] === "string" ? w["proposer"] : "",
+        critic: typeof w["critic"] === "string" ? w["critic"] : "",
+        rounds: typeof w["rounds"] === "number" ? w["rounds"] : 2,
+        judge: typeof w["judge"] === "string" ? w["judge"] : "",
+      };
+
+    default:
+      return {
+        name, pattern: "sequential", description,
+        sequence: Array.isArray(w["sequence"])
+          ? (w["sequence"] as unknown[]).map(parseSequenceStep)
+          : [],
+        commanderMayAlsoUse: Array.isArray(w["commanderMayAlsoUse"])
+          ? (w["commanderMayAlsoUse"] as string[])
+          : [],
+      };
+  }
 }
 
 export function summariseWorkflow(w: WorkflowInfo): string {
   switch (w.pattern) {
     case "sequential":
-      return w.sequence.join(" → ");
+      return w.sequence
+        .map((s) => (typeof s === "string" ? s : "[checkpoint]"))
+        .join(" → ");
     case "orchestrator":
       return `orchestrator [${w.agents.join(", ")}] max=${w.maxIterations}`;
     case "evaluator-optimizer":
       return `${w.producer} ⇄ ${w.evaluator} (max ${w.maxIterations} iter)`;
     case "conditional":
       return `${w.router} → [${w.routes.map((r) => r.condition).join(" | ")}]`;
+    case "fanout":
+      return `[${w.agents.join(", ")}] → ${w.picker}`;
+    case "parallel":
+      return `${w.subtasks.length} subtasks → ${w.merger}`;
+    case "debate":
+      return `${w.proposer} vs ${w.critic} (${w.rounds} rounds) → ${w.judge}`;
   }
 }
 

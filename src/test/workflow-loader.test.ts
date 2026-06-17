@@ -406,6 +406,216 @@ describe("workflow-loader", () => {
     );
   });
 
+  // ── sequential with checkpoints ───────────────────────────────────────────
+
+  it("loads a sequential workflow with checkpoint steps", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          guarded: {
+            sequence: ["composer", { checkpoint: "Review before continuing." }, "coder"],
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["composer", "coder"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["guarded"];
+        if (w.pattern !== "sequential") throw new Error("type guard");
+        assert.deepEqual(w.sequence, [
+          "composer",
+          { checkpoint: "Review before continuing." },
+          "coder",
+        ]);
+      }
+    );
+  });
+
+  it("throws on invalid sequence item type", async () => {
+    await withFixture(
+      JSON.stringify({ workflows: { w: { sequence: [42] } } }),
+      async (dir) => {
+        const client = makeClient([]);
+        await assert.rejects(() => loadWorkflows(client, dir), /sequence items must be/);
+      }
+    );
+  });
+
+  // ── fanout ─────────────────────────────────────────────────────────────────
+
+  it("loads a valid fanout workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          f: { pattern: "fanout", agents: ["coder", "coder"], picker: "analyzer" },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "analyzer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["f"];
+        assert.equal(w.pattern, "fanout");
+        if (w.pattern !== "fanout") throw new Error("type guard");
+        assert.deepEqual(w.agents, ["coder", "coder"]);
+        assert.equal(w.picker, "analyzer");
+      }
+    );
+  });
+
+  it("throws on fanout missing agents", async () => {
+    await withFixture(
+      JSON.stringify({ workflows: { w: { pattern: "fanout", picker: "analyzer" } } }),
+      async (dir) => {
+        const client = makeClient(["analyzer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /non-empty "agents"/);
+      }
+    );
+  });
+
+  it("throws on fanout missing picker", async () => {
+    await withFixture(
+      JSON.stringify({ workflows: { w: { pattern: "fanout", agents: ["coder"] } } }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /picker/);
+      }
+    );
+  });
+
+  it("throws when fanout references unknown agent", async () => {
+    await withFixture(
+      JSON.stringify({ workflows: { w: { pattern: "fanout", agents: ["ghost"], picker: "analyzer" } } }),
+      async (dir) => {
+        const client = makeClient(["analyzer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /Unknown agent "ghost"/);
+      }
+    );
+  });
+
+  // ── parallel ───────────────────────────────────────────────────────────────
+
+  it("loads a valid parallel workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          p: {
+            pattern: "parallel",
+            subtasks: [
+              { agent: "analyzer", prompt: "Check correctness." },
+              { agent: "analyzer", prompt: "Check security." },
+            ],
+            merger: "composer",
+          },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["analyzer", "composer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["p"];
+        assert.equal(w.pattern, "parallel");
+        if (w.pattern !== "parallel") throw new Error("type guard");
+        assert.equal(w.subtasks.length, 2);
+        assert.equal(w.merger, "composer");
+      }
+    );
+  });
+
+  it("throws on parallel missing subtasks", async () => {
+    await withFixture(
+      JSON.stringify({ workflows: { w: { pattern: "parallel", merger: "composer" } } }),
+      async (dir) => {
+        const client = makeClient(["composer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /non-empty "subtasks"/);
+      }
+    );
+  });
+
+  it("throws on parallel subtask missing prompt", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "parallel", subtasks: [{ agent: "coder" }], merger: "composer" } },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "composer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /non-empty "prompt"/);
+      }
+    );
+  });
+
+  it("throws on parallel missing merger", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "parallel", subtasks: [{ agent: "coder", prompt: "do it" }] } },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /merger/);
+      }
+    );
+  });
+
+  // ── debate ─────────────────────────────────────────────────────────────────
+
+  it("loads a valid debate workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          d: { pattern: "debate", proposer: "composer", critic: "analyzer", judge: "analyzer" },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["composer", "analyzer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["d"];
+        assert.equal(w.pattern, "debate");
+        if (w.pattern !== "debate") throw new Error("type guard");
+        assert.equal(w.proposer, "composer");
+        assert.equal(w.critic, "analyzer");
+        assert.equal(w.judge, "analyzer");
+        assert.equal(w.rounds, 2);
+      }
+    );
+  });
+
+  it("defaults debate rounds to 2", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "debate", proposer: "composer", critic: "analyzer", judge: "analyzer" } },
+      }),
+      async (dir) => {
+        const client = makeClient(["composer", "analyzer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["w"];
+        if (w.pattern !== "debate") throw new Error("type guard");
+        assert.equal(w.rounds, 2);
+      }
+    );
+  });
+
+  it("throws on debate missing judge", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "debate", proposer: "composer", critic: "analyzer" } },
+      }),
+      async (dir) => {
+        const client = makeClient(["composer", "analyzer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /judge/);
+      }
+    );
+  });
+
+  it("throws when debate references unknown agent", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { pattern: "debate", proposer: "ghost", critic: "analyzer", judge: "analyzer" } },
+      }),
+      async (dir) => {
+        const client = makeClient(["analyzer"]);
+        await assert.rejects(() => loadWorkflows(client, dir), /Unknown agent "ghost"/);
+      }
+    );
+  });
+
   it("throws on unknown pattern", async () => {
     await withFixture(
       JSON.stringify({

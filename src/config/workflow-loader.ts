@@ -5,10 +5,12 @@ import { assertAgentExists } from "./agent-registry.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export type SequenceStep = string | { checkpoint: string };
+
 export type SequentialWorkflow = {
   pattern: "sequential";
   description?: string;
-  sequence: string[];
+  sequence: SequenceStep[];
   commanderMayAlsoUse: string[];
 };
 
@@ -37,11 +39,38 @@ export type ConditionalWorkflow = {
   default: string;
 };
 
+export type FanoutWorkflow = {
+  pattern: "fanout";
+  description?: string;
+  agents: string[];
+  picker: string;
+  pickerPrompt?: string;
+};
+
+export type ParallelWorkflow = {
+  pattern: "parallel";
+  description?: string;
+  subtasks: Array<{ agent: string; prompt: string }>;
+  merger: string;
+};
+
+export type DebateWorkflow = {
+  pattern: "debate";
+  description?: string;
+  proposer: string;
+  critic: string;
+  rounds: number;
+  judge: string;
+};
+
 export type Workflow =
   | SequentialWorkflow
   | OrchestratorWorkflow
   | EvaluatorOptimizerWorkflow
-  | ConditionalWorkflow;
+  | ConditionalWorkflow
+  | FanoutWorkflow
+  | ParallelWorkflow
+  | DebateWorkflow;
 
 export type WorkflowRegistry = Record<string, Workflow>;
 
@@ -82,15 +111,36 @@ export async function loadWorkflows(
   // Validate all referenced agents exist
   const agentNames = new Set<string>();
   for (const w of Object.values(registry)) {
-    if (w.pattern === "sequential") {
-      for (const a of [...w.sequence, ...w.commanderMayAlsoUse]) agentNames.add(a);
-    } else if (w.pattern === "orchestrator") {
-      for (const a of w.agents) agentNames.add(a);
-    } else if (w.pattern === "evaluator-optimizer") {
-      agentNames.add(w.producer);
-      agentNames.add(w.evaluator);
-    } else if (w.pattern === "conditional") {
-      agentNames.add(w.router);
+    switch (w.pattern) {
+      case "sequential":
+        for (const step of w.sequence) {
+          if (typeof step === "string") agentNames.add(step);
+        }
+        for (const a of w.commanderMayAlsoUse) agentNames.add(a);
+        break;
+      case "orchestrator":
+        for (const a of w.agents) agentNames.add(a);
+        break;
+      case "evaluator-optimizer":
+        agentNames.add(w.producer);
+        agentNames.add(w.evaluator);
+        break;
+      case "conditional":
+        agentNames.add(w.router);
+        break;
+      case "fanout":
+        for (const a of w.agents) agentNames.add(a);
+        agentNames.add(w.picker);
+        break;
+      case "parallel":
+        for (const s of w.subtasks) agentNames.add(s.agent);
+        agentNames.add(w.merger);
+        break;
+      case "debate":
+        agentNames.add(w.proposer);
+        agentNames.add(w.critic);
+        agentNames.add(w.judge);
+        break;
     }
   }
   for (const name of agentNames) {
@@ -130,6 +180,9 @@ function validateWorkflow(name: string, raw: unknown): Workflow {
   if (pattern === "orchestrator") return validateOrchestratorWorkflow(name, w);
   if (pattern === "evaluator-optimizer") return validateEvaluatorOptimizerWorkflow(name, w);
   if (pattern === "conditional") return validateConditionalWorkflow(name, w);
+  if (pattern === "fanout") return validateFanoutWorkflow(name, w);
+  if (pattern === "parallel") return validateParallelWorkflow(name, w);
+  if (pattern === "debate") return validateDebateWorkflow(name, w);
   throw new Error(`Workflow "${name}": unknown pattern "${pattern}"`);
 }
 
@@ -137,11 +190,23 @@ function validateSequentialWorkflow(name: string, w: Record<string, unknown>): S
   if (!Array.isArray(w["sequence"]) || w["sequence"].length === 0) {
     throw new Error(`Workflow "${name}" must have a non-empty "sequence" array`);
   }
+  const sequence: SequenceStep[] = [];
   for (const item of w["sequence"]) {
-    if (typeof item !== "string") {
-      throw new Error(`Workflow "${name}": sequence items must be strings`);
+    if (typeof item === "string") {
+      sequence.push(item);
+    } else if (
+      typeof item === "object" &&
+      item !== null &&
+      typeof (item as Record<string, unknown>)["checkpoint"] === "string"
+    ) {
+      sequence.push({ checkpoint: (item as Record<string, unknown>)["checkpoint"] as string });
+    } else {
+      throw new Error(
+        `Workflow "${name}": sequence items must be agent name strings or { "checkpoint": "message" } objects`
+      );
     }
   }
+
   const mayAlsoUse = w["commanderMayAlsoUse"];
   if (mayAlsoUse !== undefined && !Array.isArray(mayAlsoUse)) {
     throw new Error(`Workflow "${name}": "commanderMayAlsoUse" must be an array`);
@@ -153,10 +218,11 @@ function validateSequentialWorkflow(name: string, w: Record<string, unknown>): S
       }
     }
   }
+
   return {
     pattern: "sequential",
     description: typeof w["description"] === "string" ? w["description"] : undefined,
-    sequence: w["sequence"] as string[],
+    sequence,
     commanderMayAlsoUse: Array.isArray(mayAlsoUse) ? (mayAlsoUse as string[]) : [],
   };
 }
@@ -246,5 +312,79 @@ function validateConditionalWorkflow(name: string, w: Record<string, unknown>): 
       workflow: r["workflow"] as string,
     })),
     default: w["default"] as string,
+  };
+}
+
+function validateFanoutWorkflow(name: string, w: Record<string, unknown>): FanoutWorkflow {
+  if (!Array.isArray(w["agents"]) || w["agents"].length === 0) {
+    throw new Error(`Fan-out workflow "${name}" must have a non-empty "agents" array`);
+  }
+  for (const item of w["agents"]) {
+    if (typeof item !== "string") {
+      throw new Error(`Workflow "${name}": agents items must be strings`);
+    }
+  }
+  if (typeof w["picker"] !== "string" || !w["picker"].trim()) {
+    throw new Error(`Fan-out workflow "${name}" must have a non-empty "picker" string`);
+  }
+  const pickerPrompt = w["pickerPrompt"];
+  if (pickerPrompt !== undefined && typeof pickerPrompt !== "string") {
+    throw new Error(`Workflow "${name}": "pickerPrompt" must be a string`);
+  }
+  return {
+    pattern: "fanout",
+    description: typeof w["description"] === "string" ? w["description"] : undefined,
+    agents: w["agents"] as string[],
+    picker: w["picker"] as string,
+    pickerPrompt: typeof pickerPrompt === "string" ? pickerPrompt : undefined,
+  };
+}
+
+function validateParallelWorkflow(name: string, w: Record<string, unknown>): ParallelWorkflow {
+  if (!Array.isArray(w["subtasks"]) || w["subtasks"].length === 0) {
+    throw new Error(`Parallel workflow "${name}" must have a non-empty "subtasks" array`);
+  }
+  const subtasks: Array<{ agent: string; prompt: string }> = [];
+  for (const subtask of w["subtasks"]) {
+    if (typeof subtask !== "object" || subtask === null) {
+      throw new Error(`Workflow "${name}": each subtask must be an object`);
+    }
+    const s = subtask as Record<string, unknown>;
+    if (typeof s["agent"] !== "string" || !s["agent"].trim()) {
+      throw new Error(`Workflow "${name}": each subtask must have a non-empty "agent" string`);
+    }
+    if (typeof s["prompt"] !== "string" || !s["prompt"].trim()) {
+      throw new Error(`Workflow "${name}": each subtask must have a non-empty "prompt" string`);
+    }
+    subtasks.push({ agent: s["agent"] as string, prompt: s["prompt"] as string });
+  }
+  if (typeof w["merger"] !== "string" || !w["merger"].trim()) {
+    throw new Error(`Parallel workflow "${name}" must have a non-empty "merger" string`);
+  }
+  return {
+    pattern: "parallel",
+    description: typeof w["description"] === "string" ? w["description"] : undefined,
+    subtasks,
+    merger: w["merger"] as string,
+  };
+}
+
+function validateDebateWorkflow(name: string, w: Record<string, unknown>): DebateWorkflow {
+  for (const field of ["proposer", "critic", "judge"] as const) {
+    if (typeof w[field] !== "string" || !(w[field] as string).trim()) {
+      throw new Error(`Debate workflow "${name}" must have a non-empty "${field}" string`);
+    }
+  }
+  const rounds = w["rounds"];
+  if (rounds !== undefined && (typeof rounds !== "number" || rounds < 1)) {
+    throw new Error(`Workflow "${name}": "rounds" must be a positive number`);
+  }
+  return {
+    pattern: "debate",
+    description: typeof w["description"] === "string" ? w["description"] : undefined,
+    proposer: w["proposer"] as string,
+    critic: w["critic"] as string,
+    rounds: typeof rounds === "number" ? rounds : 2,
+    judge: w["judge"] as string,
   };
 }
