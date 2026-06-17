@@ -1,9 +1,9 @@
 # openflow
 
-> ⚠️ **BETA — IN ACTIVE DEVELOPMENT**
-> This project is experimental. APIs, config formats, and agent behaviour will change between versions. Not recommended for production use. Feedback and issues welcome.
+> ⚠️ **BETA — IN ACTIVE DEVELOPMENT**  
+> APIs, config formats, and agent behaviour will change between versions. Not recommended for production use.
 
-Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define named sequences of specialised agents — composer, coder, analyzer — and run them with a single slash command. Each agent hands off structured output to the next; nothing falls through the cracks.
+Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define named sequences of specialised agents and run them with a single slash command. Seven coordination patterns are available — from simple pipelines to complexity-gated routing, parallel execution, and iterative quality loops.
 
 ```
 /workflow feature
@@ -19,81 +19,24 @@ Workflow complete ✅
 
 ---
 
-## How it works
+## Table of Contents
 
-Openflow is an [MCP](https://modelcontextprotocol.io) server that plugs into OpenCode. It exposes five tools (`delegate_task`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`) and defines a **commander** agent that uses them to orchestrate workflows.
-
-```mermaid
-graph TD
-    User["User\n/workflow feature"]
-    Commander["Commander agent\n(primary)"]
-    MCP["Openflow MCP server\nsrc/mcp.ts"]
-    OC["OpenCode server\n127.0.0.1:4096"]
-
-    User -->|"slash command"| Commander
-    Commander -->|"get_workflow('feature')"| MCP
-    Commander -->|"delegate_task(composer)"| MCP
-    Commander -->|"delegate_task(coder)"| MCP
-    Commander -->|"delegate_task(analyzer)"| MCP
-    Commander -->|"create_workflow / create_agent"| MCP
-    MCP -->|"session.create() + session.prompt()"| OC
-    MCP -->|"writes openflow.json / opencode.json"| OC
-    OC -->|"child session response"| MCP
-    MCP -->|"result"| Commander
-```
-
-### Workflow execution
-
-Each `delegate_task` call spawns a child session pinned to the named agent. The commander collects each result and passes it forward as structured context to the next step.
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant C as Commander
-    participant M as MCP server
-    participant OC as OpenCode API
-
-    U->>C: /workflow feature — Fix the add() bug
-    C->>M: get_workflow("feature")
-    M-->>C: sequence: [composer, coder, analyzer]
-
-    Note over C: Step 1/3 → composer
-    C->>M: delegate_task(composer, prompt)
-    M->>OC: session.create()
-    M->>OC: session.prompt(agent=composer)
-    OC-->>M: Task brief with acceptance criteria
-    M-->>C: brief
-
-    Note over C: Step 2/3 → coder
-    C->>M: delegate_task(coder, prompt, context=brief)
-    M->>OC: session.create()
-    M->>OC: session.prompt(agent=coder)
-    OC-->>M: Handoff summary + changed files
-    M-->>C: handoff
-
-    Note over C: Step 3/3 → analyzer
-    C->>M: delegate_task(analyzer, prompt, context=brief+handoff)
-    M->>OC: session.create()
-    M->>OC: session.prompt(agent=analyzer)
-    OC-->>M: Findings report (PASS / WARNINGS / FAIL)
-    M-->>C: report
-
-    C-->>U: Workflow complete summary
-```
+1. [Installation](#1-installation)
+2. [Usage](#2-usage)
+3. [Configuration](#3-configuration)
+4. [Options](#4-options)
 
 ---
 
-## Requirements
+## 1. Installation
+
+### Requirements
 
 - [OpenCode CLI](https://opencode.ai) — `opencode` must be on your PATH
 - Node.js 20+
-- An LLM provider configured in OpenCode (Anthropic, OpenAI, etc.)
+- An LLM provider configured in OpenCode
 
----
-
-## Setup
-
-### 1. Clone and install
+### 1.1 Clone and install
 
 ```bash
 git clone https://github.com/th-lange/openflow.git
@@ -101,10 +44,11 @@ cd openflow
 npm install
 ```
 
-### 2. Add to your project's `opencode.json`
+### 1.2 Configure your project's `opencode.json`
 
-Merge the following blocks into your project's `opencode.json` (or create one if you don't have it). Adjust the path to openflow to match where you cloned it.
+In your project directory, create or update `opencode.json` with three blocks:
 
+**MCP server** — points OpenCode at the openflow server:
 ```json
 {
   "mcp": {
@@ -112,57 +56,52 @@ Merge the following blocks into your project's `opencode.json` (or create one if
       "type": "local",
       "command": ["node", "--import", "tsx/esm", "/path/to/openflow/src/mcp.ts"]
     }
-  },
+  }
+}
+```
+
+**Slash command** — registers `/workflow`:
+```json
+{
   "command": {
     "workflow": {
       "description": "Execute a named workflow, e.g. /workflow feature",
       "agent": "commander",
       "template": "Run workflow: {{input}}"
     }
-  },
-  "agent": {
-    "commander": { ... },
-    "composer":  { ... },
-    "coder":     { ... },
-    "analyzer":  { ... }
   }
 }
 ```
 
-> The full agent definitions are in [`opencode.json`](./opencode.json) in this repo. Copy the `agent` block from there — the prompts are long and need to be included verbatim.
+**Agent definitions** — copy the `agent` block from [`opencode.json`](./opencode.json) in this repo. The system prompts are long and must be included verbatim. At minimum you need `commander`; add the others for the built-in workflows to work.
 
-### 3. Create `openflow.json` in your project
-
-Define which workflows you want and which agents they use:
+### 1.3 Create `openflow.json` in your project
 
 ```json
 {
   "workflows": {
     "feature": {
-      "description": "Full development cycle: compose brief → implement → review",
+      "description": "Full development cycle",
       "sequence": ["composer", "coder", "analyzer"],
       "commanderMayAlsoUse": ["composer", "coder", "analyzer"]
-    },
-    "review": {
-      "description": "Code review only",
-      "sequence": ["analyzer"],
-      "commanderMayAlsoUse": ["analyzer"]
     }
   }
 }
 ```
 
-### 4. Start OpenCode in your project
+See [Configuration](#3-configuration) for all patterns and [Options](#4-options) for the full field reference.
+
+### 1.4 Start OpenCode
 
 ```bash
 opencode
 ```
 
-OpenCode will automatically load the MCP server on startup. You should see all five tools (`delegate_task`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`) become available.
+OpenCode loads the MCP server on startup. Six tools become available to the commander: `delegate_task`, `run_workflow`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`.
 
 ---
 
-## Usage
+## 2. Usage
 
 ### Run a workflow
 
@@ -170,13 +109,14 @@ OpenCode will automatically load the MCP server on startup. You should see all f
 /workflow feature
 ```
 
-Activates the commander, which looks up the `feature` workflow, announces the plan, and executes each step in sequence.
+The commander looks up the workflow, announces its plan, and executes each step in sequence. Pass your task description directly after the command:
 
 ```
-/workflow review
-```
+/workflow feature
 
-Runs just the analyzer on the current state of the codebase.
+The parseDate() function in src/utils/date.ts throws on empty string.
+It should return null instead.
+```
 
 ### List available workflows
 
@@ -184,135 +124,286 @@ Runs just the analyzer on the current state of the codebase.
 /workflow
 ```
 
-The commander calls `list_workflows` and shows what's defined in your `openflow.json`.
+The commander calls `list_workflows` and displays what's defined in `openflow.json`. Disabled workflows are not shown.
 
-### Provide context
-
-Just describe your task after the command — the commander passes it to each agent:
-
-```
-/workflow feature
-
-The `parseDate()` function in src/utils/date.ts throws when given an
-empty string. It should return null instead.
-```
-
----
-
-## Built-in workflows
-
-| Workflow | Sequence | Use when |
-|----------|----------|----------|
-| `feature` | composer → coder → analyzer | You have a vague idea and want the full cycle |
-| `implement` | coder → analyzer | You already have a spec or brief |
-| `review` | analyzer | You want a code review without making changes |
-
----
-
-## Built-in agents
-
-```mermaid
-graph LR
-    Commander["🎯 commander\nprimary agent\norchestrates steps"]
-    Composer["📝 composer\nread-only\nproduces task briefs"]
-    Coder["⚙️ coder\nfull file access\nimplements changes"]
-    Analyzer["🔍 analyzer\nread-only\nreviews and reports"]
-
-    Commander -->|"step 1"| Composer
-    Commander -->|"step 2"| Coder
-    Commander -->|"step 3"| Analyzer
-```
-
-### commander
-Orchestrates the workflow. Calls `get_workflow` to look up the sequence, then `delegate_task` for each step in order. Passes each step's output as structured context to the next. Does not write code or edit files directly.
-
-### composer
-Turns a vague request into a structured **task brief** with a problem statement, acceptance criteria, constraints, and assumptions. Has no file access — purely a planning agent.
-
-Output format:
-```
-## Task brief
-**Problem:** ...
-**Acceptance criteria:** ...
-**Constraints:** ...
-**Assumptions:** ...
-```
-
-### coder
-Implements the brief. Reads existing code first, makes the smallest change that satisfies every acceptance criterion, and ends with a **handoff summary** naming which files changed and what risks the analyzer should check.
-
-### analyzer
-Reviews the coder's changes against the original acceptance criteria. Produces a **findings report** with a verdict (PASS / PASS WITH WARNINGS / FAIL) and a table of specific findings by severity (blocker / warning / suggestion). Does not modify files.
-
----
-
-## Defining custom workflows
-
-### Via the tool (recommended)
-
-Ask the commander to create one for you:
+### Create a workflow
 
 ```
 Create a workflow called "hotfix" that runs coder then analyzer,
-with a description "Fast path for urgent fixes".
+with the description "Fast path for urgent fixes".
 ```
 
-The commander calls `create_workflow`, which validates agent names and writes to `openflow.json`. The workflow is available immediately — no restart needed.
+The commander calls `create_workflow`, validates agent names, and writes to `openflow.json`. Available immediately — no restart needed.
 
-### Manually
+### Create an agent
 
-Edit `openflow.json` in your project root:
+```
+Create an agent called "documenter" that writes JSDoc comments for
+TypeScript functions. It should be read-only with no bash access.
+```
+
+The commander calls `create_agent` and writes to `opencode.json`. **Restart OpenCode** after creating an agent before it can be used in workflows.
+
+### Disable a workflow
+
+Add `"disabled": true` to any workflow in `openflow.json`. The workflow is hidden from `list_workflows` and cannot be run, but stays in the file so it can be re-enabled later.
 
 ```json
 {
   "workflows": {
-    "my-workflow": {
-      "description": "What this workflow does",
-      "sequence": ["composer", "coder", "analyzer"],
-      "commanderMayAlsoUse": ["composer", "coder", "analyzer"]
+    "draft-workflow": {
+      "disabled": true,
+      "sequence": ["composer", "coder"]
     }
   }
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `sequence` | yes | Ordered list of agent names to run. Each must be defined in `opencode.json`. |
-| `commanderMayAlsoUse` | no | Agents the commander may deviate to when a step fails. Defaults to `[]`. |
-| `description` | no | Shown by `list_workflows`. |
+---
+
+## 3. Configuration
+
+### openflow.json structure
+
+All workflows live under a `"workflows"` key, each keyed by name:
+
+```json
+{
+  "workflows": {
+    "my-workflow": {
+      "pattern": "sequential",
+      "description": "What this workflow does",
+      "sequence": ["composer", "coder", "analyzer"]
+    }
+  }
+}
+```
+
+The `pattern` field selects the coordination strategy. Omitting it defaults to `"sequential"`.
+
+### Workflow patterns
+
+| Pattern | Description |
+|---------|-------------|
+| `sequential` | Fixed agent sequence; each step receives prior output as context |
+| `orchestrator` | A primary agent dynamically decides which agents to call and in what order |
+| `evaluator-optimizer` | Producer generates; evaluator scores; loops until pass or max iterations |
+| `conditional` | A router agent classifies the request and dispatches to the matching workflow |
+| `fanout` | Same task sent to N agents; a picker selects the best result |
+| `parallel` | Independent subtasks run concurrently; a merger consolidates results |
+| `debate` | Proposer and critic alternate; a judge delivers a verdict on the transcript |
+
+### Workflow composition
+
+Any workflow can be embedded as a step inside a sequential workflow using `{ "workflow": "name" }`:
+
+```json
+{
+  "workflows": {
+    "feature": {
+      "sequence": ["composer", { "workflow": "smart-implement" }, "analyzer"]
+    },
+    "smart-implement": {
+      "pattern": "conditional",
+      "router": "complexity-gate",
+      "routes": [
+        { "condition": "simple",  "workflow": "implement-simple" },
+        { "condition": "complex", "workflow": "implement-premium" }
+      ],
+      "default": "implement"
+    }
+  }
+}
+```
+
+Rules:
+- All workflows are defined flat at the top level — never nested in JSON
+- Cycles (`a → b → a`) are detected and rejected at startup
+- A workflow containing `checkpoint` steps cannot be referenced by another workflow (checkpoints require top-level commander execution)
+
+### Agent definitions
+
+Agents are defined in your project's `opencode.json` under `"agent"`. The built-in agents in this repo's `opencode.json` can be copied as-is. Changes to `opencode.json` require an OpenCode restart before new agents are usable.
 
 ---
 
-## Defining custom agents
+## 4. Options
 
-### Via the tool (recommended)
+### Sequential
 
-Ask the commander to create one for you:
-
-```
-Create a new agent called "documenter" that writes JSDoc comments for
-TypeScript functions. It should be read-only with no bash access.
-```
-
-The commander calls `create_agent`, which writes to `opencode.json`. You then need to **restart OpenCode** (or re-open the project) for the new agent to become available.
-
-```
-Create a workflow called "document" that just runs the documenter agent.
+```json
+{
+  "pattern": "sequential",
+  "sequence": ["composer", "coder", "analyzer"],
+  "commanderMayAlsoUse": ["composer", "coder"],
+  "description": "Full development cycle"
+}
 ```
 
-After reloading, `/workflow document` runs the new agent.
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `sequence` | yes | — | Ordered steps. Each is an agent name, `{ "workflow": "name" }`, or `{ "checkpoint": "message" }` |
+| `commanderMayAlsoUse` | no | `[]` | Agents the commander may deviate to when a step fails |
+| `description` | no | — | Shown in `list_workflows` |
+| `disabled` | no | `false` | Hide from listing and block execution |
 
-### Manually
+#### Sequence step types
 
-Add an entry to the `agent` block in `opencode.json`:
+| Form | Example | Behaviour |
+|------|---------|-----------|
+| Agent name | `"coder"` | Delegates to that agent |
+| Workflow reference | `{ "workflow": "implement" }` | Executes the named workflow inline |
+| Checkpoint | `{ "checkpoint": "Review before continuing." }` | Pauses and prompts the user to confirm before proceeding |
+
+### Orchestrator
+
+```json
+{
+  "pattern": "orchestrator",
+  "agents": ["composer", "coder", "analyzer"],
+  "maxIterations": 6,
+  "satisfactionCriteria": "The task is complete and the analyzer has confirmed no issues."
+}
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `agents` | yes | — | Agents the orchestrator may call |
+| `satisfactionCriteria` | yes | — | Condition the orchestrator evaluates to decide when to stop |
+| `maxIterations` | no | `6` | Maximum delegation turns before stopping |
+| `description` / `disabled` | no | — | See [Common fields](#common-fields) |
+
+The orchestrator receives the task and decides at runtime which agents to call, in what order, and how many times. Unlike sequential, the sequence is not fixed.
+
+### Evaluator-Optimizer
+
+```json
+{
+  "pattern": "evaluator-optimizer",
+  "producer": "coder",
+  "evaluator": "analyzer",
+  "maxIterations": 3,
+  "passCriteria": "PASS"
+}
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `producer` | yes | — | Agent that generates output |
+| `evaluator` | yes | — | Agent that scores the output |
+| `passCriteria` | no | `"PASS"` | String the evaluator's response must contain to exit the loop |
+| `maxIterations` | no | `3` | Maximum producer/evaluator cycles |
+| `description` / `disabled` | no | — | See [Common fields](#common-fields) |
+
+On each iteration the evaluator's feedback is passed to the producer. The loop exits when `passCriteria` is matched or `maxIterations` is reached.
+
+### Conditional
+
+```json
+{
+  "pattern": "conditional",
+  "router": "complexity-gate",
+  "routes": [
+    { "condition": "simple",  "workflow": "implement-simple" },
+    { "condition": "medium",  "workflow": "implement" },
+    { "condition": "complex", "workflow": "implement-premium" }
+  ],
+  "default": "implement"
+}
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `router` | yes | — | Agent that classifies the request |
+| `routes` | yes | — | Array of `{ condition, workflow }` mappings |
+| `default` | yes | — | Workflow to run when no condition matches |
+| `description` / `disabled` | no | — | See [Common fields](#common-fields) |
+
+The router agent is instructed to return one of the condition labels as its output. Unrecognised labels fall back to `default`.
+
+### Fan-out
+
+```json
+{
+  "pattern": "fanout",
+  "agents": ["coder", "coder", "coder"],
+  "picker": "analyzer",
+  "pickerPrompt": "Select the implementation with the best code quality and minimal surface area."
+}
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `agents` | yes | — | Agents to run in parallel (duplicates allowed) |
+| `picker` | yes | — | Agent that selects the best result |
+| `pickerPrompt` | no | — | Extra instruction given to the picker |
+| `description` / `disabled` | no | — | See [Common fields](#common-fields) |
+
+All agents receive the same prompt and run concurrently. The picker receives all outputs and selects one winner.
+
+### Parallel
+
+```json
+{
+  "pattern": "parallel",
+  "subtasks": [
+    { "agent": "analyzer", "prompt": "Review for correctness and logic errors." },
+    { "agent": "analyzer", "prompt": "Review for security vulnerabilities." },
+    { "agent": "analyzer", "prompt": "Review for performance and readability." }
+  ],
+  "merger": "composer"
+}
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `subtasks` | yes | — | Array of `{ agent, prompt }` — each runs independently and concurrently |
+| `merger` | yes | — | Agent that consolidates all subtask outputs into a final result |
+| `description` / `disabled` | no | — | See [Common fields](#common-fields) |
+
+Unlike fan-out, each subtask has its own prompt. The original user prompt is forwarded to each subtask as context alongside its specific instruction.
+
+### Debate
+
+```json
+{
+  "pattern": "debate",
+  "proposer": "composer",
+  "critic": "analyzer",
+  "rounds": 2,
+  "judge": "analyzer"
+}
+```
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `proposer` | yes | — | Agent that makes the initial proposal and responds to critique |
+| `critic` | yes | — | Agent that argues against the proposal |
+| `judge` | yes | — | Agent that reviews the full transcript and delivers a verdict |
+| `rounds` | no | `2` | Number of propose/critique cycles before the judge |
+| `description` / `disabled` | no | — | See [Common fields](#common-fields) |
+
+The full debate transcript is passed to each participant at every turn. The judge receives the complete exchange and returns a decision with reasoning.
+
+### Common fields
+
+Accepted by all patterns:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `description` | string | — | Human-readable summary shown by `list_workflows` |
+| `disabled` | boolean | `false` | Hide from `list_workflows` and block execution. Agent references in disabled workflows are not validated, so you can safely disable workflows that reference deprecated agents. |
+
+### Agent fields
 
 ```json
 {
   "agent": {
-    "documenter": {
-      "description": "Writes JSDoc comments for TypeScript functions.",
+    "my-agent": {
+      "description": "One-line summary shown in tool listings",
       "mode": "subagent",
-      "prompt": "You are a documentation agent. Your only job is to add JSDoc comments to TypeScript functions...",
+      "model": "anthropic/claude-haiku-4-5",
+      "prompt": "You are ...",
       "permission": {
         "edit": "allow",
         "bash": "deny"
@@ -326,313 +417,58 @@ Add an entry to the `agent` block in `opencode.json`:
 | Field | Default | Description |
 |-------|---------|-------------|
 | `mode` | `subagent` | `subagent` (called by commander) or `primary` (user-facing) |
-| `prompt` | — | System prompt. Be specific about what the agent must and must not do. |
+| `prompt` | — | System prompt — be specific about what the agent must and must not do |
+| `model` | system default | Model override, e.g. `anthropic/claude-haiku-4-5` or `anthropic/claude-opus-4-8` |
 | `permission.edit` | `deny` | `allow` or `deny` file edits |
 | `permission.bash` | `deny` | `allow` or `deny` shell commands |
-| `model` | system default | Override with e.g. `anthropic/claude-haiku-4-5` for cheaper/faster agents |
+| `tools` | `{}` | Additional MCP tool scopes |
 
-> **Note:** changes to `opencode.json` require an OpenCode restart before new agents are usable via `delegate_task`.
+### Built-in agents
+
+Defined in this repo's [`opencode.json`](./opencode.json) — copy the entries you need into your project.
+
+| Agent | Model | Permissions | Role |
+|-------|-------|-------------|------|
+| `commander` | default | — | Primary agent; orchestrates all workflows |
+| `composer` | default | read-only | Turns vague requests into structured task briefs |
+| `coder` | default | edit + bash | Implements changes; produces handoff summaries |
+| `coder-weak` | haiku | edit + bash | Fast, minimal coder for simple tasks |
+| `coder-strong` | opus | edit + bash | Thorough, careful coder for complex tasks |
+| `analyzer` | default | read-only | Reviews code for correctness, security, and simplicity |
+| `complexity-gate` | haiku | read-only | Classifies tasks as simple / medium / complex |
+| `openflow-echo` | default | read-only | Test agent — echoes instructions verbatim |
+
+### Sample workflows
+
+The repo's [`openflow.json`](./openflow.json) contains ready-to-use examples. Copy any you want into your project's `openflow.json`.
+
+| Workflow | Pattern | Description |
+|----------|---------|-------------|
+| `feature` | sequential | composer → coder → analyzer |
+| `implement` | sequential | coder → analyzer |
+| `review` | sequential | analyzer only |
+| `guarded-feature` | sequential | Feature cycle with human checkpoints before implementation and before review |
+| `quality-implement` | evaluator-optimizer | coder iterates until analyzer gives PASS (max 3) |
+| `best-of-3` | fanout | 3 independent coder runs; analyzer picks the best |
+| `parallel-review` | parallel | 3 concurrent analyzer passes (correctness / security / performance) |
+| `arch-debate` | debate | composer proposes, analyzer critiques (2 rounds), analyzer judges |
+| `auto-route` | conditional | composer classifies bug / feature / review and dispatches accordingly |
+| `complexity-route` | conditional | composer routes simple → `implement` or complex → `quality-implement` |
+| `smart-implement` | conditional | complexity-gate routes to `implement-simple` / `implement` / `implement-premium` by tier |
+| `implement-simple` | sequential | coder-weak only — fast, no review step |
+| `implement-premium` | evaluator-optimizer | coder-strong iterates until analyzer gives PASS (max 4) |
+| `feature-smart` | sequential | composer → smart-implement (composed) → analyzer |
+| `smart-dev` | orchestrator | Dynamic — commander decides which agents to call at runtime |
 
 ---
 
 ## Development
 
 ```bash
-# Validate session.prompt() spawning works in your environment
-npm run proto
-
-# Unit tests (config loaders, no LLM needed, ~250ms)
-npm test
-
-# Full E2E suite (starts its own OpenCode server, makes real LLM calls, ~5 min)
-npm run e2e
+npm test       # Unit tests (~300 ms, no LLM needed)
+npm run proto  # Validate session spawning works in your environment
+npm run e2e    # Full E2E suite — requires a running OpenCode server and LLM (~5 min)
 ```
-
-### Project structure
-
-```
-openflow/
-├── src/
-│   ├── mcp.ts                  # MCP server entry point
-│   ├── tools/
-│   │   ├── delegate-task.ts    # Core delegation tool
-│   │   ├── workflow-tools.ts   # get_workflow, list_workflows
-│   │   └── management-tools.ts # create_workflow, create_agent
-│   ├── config/
-│   │   ├── agent-registry.ts   # Fetches agents from OpenCode API
-│   │   └── workflow-loader.ts  # Reads + validates openflow.json
-│   ├── state/
-│   │   └── step-store.ts       # Session-keyed workflow progress
-│   ├── agents/
-│   │   ├── commander.md        # Commander system prompt (source of truth)
-│   │   ├── composer.md
-│   │   ├── coder.md
-│   │   └── analyzer.md
-│   └── test/
-│       ├── agent-registry.test.ts
-│       ├── workflow-loader.test.ts
-│       └── management-tools.test.ts
-├── opencode.json               # Agent definitions + MCP + command config
-└── openflow.json               # Sample workflow definitions
-```
-
----
-
-## How context propagation works
-
-After each step the commander builds a context block and passes it into the next `delegate_task` call:
-
-```
-## Prior step results
-
-### Step 1 — composer
-The add() function in calculator.ts subtracts instead of adds.
-Acceptance criteria: return value equals a + b for all inputs.
-Constraints: do not change the function signature.
-
-### Step 2 — coder
-Changed return a - b to return a + b on line 3.
-Removed stale inline comment.
-```
-
-This means the analyzer sees both the original brief and exactly what the coder did — without the commander having to summarise or transform anything manually.
-
----
-
-## Roadmap — agentic patterns
-
-> The following patterns are **in development**. The current release only supports the sequential pipeline. These will each add a `pattern` field to workflow definitions.
-
-The core insight: a workflow's `sequence` field today implies a fixed linear pipeline. Adding `pattern` unlocks fundamentally different coordination strategies between agents.
-
----
-
-### Sequential pipeline *(current)*
-
-```json
-{ "pattern": "sequential", "sequence": ["composer", "coder", "analyzer"] }
-```
-
-Fixed order. Each step receives the prior step's output as context. This is the only pattern available today.
-
----
-
-### Orchestrator
-
-```json
-{
-  "pattern": "orchestrator",
-  "agents": ["composer", "coder", "analyzer", "debugger"],
-  "maxIterations": 6,
-  "satisfactionCriteria": "The task is complete and all acceptance criteria are met."
-}
-```
-
-A dedicated orchestrator agent receives the task and dynamically decides which agent to call next based on the current state. It keeps delegating until its own satisfaction check passes or `maxIterations` is reached. Unlike sequential, the order is not fixed — the orchestrator decides at runtime.
-
-**Good for:** tasks where the right sequence can't be known upfront; research-then-implement workflows; agents that may need to be called more than once.
-
-**Implementation:** The orchestrator is itself an agent with `delegate_task` access. The MCP server adds a loop guard (`maxIterations`) and injects the satisfaction check as a required final step before the orchestrator can return.
-
----
-
-### Fan-out / Best-of-N
-
-```json
-{
-  "pattern": "fanout",
-  "agents": ["coder", "coder", "coder"],
-  "picker": "analyzer",
-  "pickerPrompt": "Select the implementation with the best code quality, clarity, and minimal surface area."
-}
-```
-
-The same task is dispatched to N agents (potentially the same agent type run N times, or N different specialists). A picker agent receives all results and selects the best one. The winning result is returned as the workflow output.
-
-**Good for:** code generation where quality matters (get 3 implementations, keep the cleanest); architecture proposals; any task where you want diversity of output before committing.
-
-**Implementation:** `delegate_task` is called N times (in parallel via `Promise.all`). All results are bundled and sent to the picker agent. The picker's selection is the final output.
-
----
-
-### Evaluator-Optimizer loop
-
-```json
-{
-  "pattern": "evaluator-optimizer",
-  "producer": "coder",
-  "evaluator": "analyzer",
-  "maxIterations": 4,
-  "passCriteria": "PASS"
-}
-```
-
-The producer generates output; the evaluator scores it. If the evaluator's verdict doesn't match `passCriteria`, the producer is called again with the evaluator's feedback as context. Loops until the criteria is met or `maxIterations` is exhausted.
-
-**Good for:** code quality enforcement; test coverage; any task with a clear binary pass/fail criterion that an agent can evaluate.
-
-**Implementation:** New `evaluatorOptimizerLoop` in the MCP server. Each iteration passes the previous evaluator feedback to the producer via the `context` field. On FAIL the loop continues; on PASS or max iterations it exits and returns the last producer output.
-
----
-
-### Parallel / Map-Reduce
-
-```json
-{
-  "pattern": "parallel",
-  "subtasks": [
-    { "agent": "frontend-coder", "prompt": "Implement the UI component" },
-    { "agent": "backend-coder",  "prompt": "Implement the API endpoint" },
-    { "agent": "db-coder",       "prompt": "Write the migration" }
-  ],
-  "merger": "composer"
-}
-```
-
-The task is split into N independent subtasks, each dispatched to a specialist agent simultaneously. A merger agent consolidates the results into a coherent whole.
-
-**Good for:** large features spanning multiple layers (frontend + backend + DB); reviewing multiple files independently; parallelising any set of work that has no inter-dependency.
-
-**Implementation:** Subtask `delegate_task` calls run concurrently via `Promise.all`. The merger receives all outputs as structured context. The split can be defined statically in config or dynamically by a splitter agent.
-
----
-
-### Conditional branching
-
-```json
-{
-  "pattern": "conditional",
-  "router": "classifier",
-  "routes": [
-    { "condition": "bug",          "workflow": "debug" },
-    { "condition": "feature",      "workflow": "feature" },
-    { "condition": "refactor",     "workflow": "implement" }
-  ],
-  "default": "feature"
-}
-```
-
-A router agent classifies the incoming request and dispatches to the matching workflow. Routes map condition labels to existing workflow names.
-
-**Good for:** heterogeneous task queues where you don't want to pre-specify the workflow; teams that want a single entry point that self-routes; catch-all "do the right thing" commands.
-
-**Implementation:** The router agent is called first, asked to return one of the condition labels as structured output. The MCP server reads the label, looks up the target workflow, and executes it. Falls back to `default` if no route matches.
-
----
-
-### Human checkpoint
-
-```json
-{
-  "pattern": "sequential",
-  "sequence": [
-    "composer",
-    { "checkpoint": "Review the brief above and confirm before implementation begins." },
-    "coder",
-    { "checkpoint": "Review the diff above before the analyzer runs." },
-    "analyzer"
-  ]
-}
-```
-
-Designated steps in the sequence pause and surface a message to the user. Execution resumes only after the user explicitly continues (or can be cancelled).
-
-**Good for:** sensitive operations (schema migrations, deploys, destructive changes); any workflow where human sign-off before a point of no return is required; keeping a human in the loop without abandoning automation.
-
-**Implementation:** Checkpoint steps are not agent calls — they emit a structured pause event to the OpenCode session, which surfaces to the user as an interactive prompt. The MCP server holds the workflow state until the user responds.
-
----
-
-### Debate / Adversarial
-
-```json
-{
-  "pattern": "debate",
-  "proposer": "architect",
-  "critic": "security-reviewer",
-  "rounds": 2,
-  "judge": "analyzer"
-}
-```
-
-A proposer agent makes a case; a critic agent argues against it. They alternate for `rounds` turns, each seeing the other's arguments. A judge agent reviews the full transcript and delivers a verdict.
-
-**Good for:** architecture decisions with real tradeoffs; security review of a proposed design; any decision where you want a structured devil's advocate before committing.
-
-**Implementation:** Proposer and critic take turns via `delegate_task`, each receiving the full prior debate as context. After `rounds` exchanges the judge receives the entire transcript and returns a decision with reasoning.
-
----
-
-### Pattern composition *(planned)*
-
-Any workflow can be used as a step inside another workflow. Rather than agent names only, a step in a sequence can be a workflow reference:
-
-```json
-{
-  "workflows": {
-    "feature": {
-      "pattern": "sequential",
-      "sequence": [
-        "composer",
-        { "workflow": "complexity-route" },
-        "analyzer"
-      ]
-    },
-
-    "complexity-route": {
-      "pattern": "conditional",
-      "router": "classifier",
-      "routes": [
-        { "condition": "simple",  "workflow": "quick-implement" },
-        { "condition": "complex", "workflow": "thorough-implement" }
-      ],
-      "default": "quick-implement"
-    },
-
-    "quick-implement": {
-      "pattern": "sequential",
-      "sequence": ["coder"]
-    },
-
-    "thorough-implement": {
-      "pattern": "evaluator-optimizer",
-      "producer": "coder",
-      "evaluator": "analyzer",
-      "maxIterations": 4,
-      "passCriteria": "PASS"
-    }
-  }
-}
-```
-
-`/workflow feature` resolves the composition at runtime:
-
-```mermaid
-graph TD
-    Feature["feature\n(sequential)"]
-    Composer["composer"]
-    Route["complexity-route\n(conditional)"]
-    Analyzer["analyzer"]
-    Quick["quick-implement\ncoder"]
-    Thorough["thorough-implement\nevaluator-optimizer\ncoder ⇄ analyzer"]
-
-    Feature --> Composer
-    Composer --> Route
-    Route -->|"simple"| Quick
-    Route -->|"complex"| Thorough
-    Quick --> Analyzer
-    Thorough --> Analyzer
-```
-
-**Design rules:**
-
-- `openflow.json` stays **flat** — all workflows defined at the top level, never nested in JSON
-- A step is one of: agent name (string) · workflow reference `{ "workflow": "name" }` · checkpoint `{ "checkpoint": "..." }`
-- Cycles are rejected at load time (`feature → complexity-route → feature` throws on startup, not at runtime)
-- Nested workflows govern their own deviations — `commanderMayAlsoUse` at the outer level applies only to that level's own direct steps
-- A workflow containing a `{ "checkpoint" }` step cannot be referenced by another workflow. Checkpoints need to pause for the user, which only the top-level commander can do — a referenced sub-workflow runs in code and can't pause. Put the checkpoint in the hosting (top-level) sequence instead; the heavy sub-pattern it gates stays a checkpoint-free reference. This is enforced at load time.
-
-**Good for:** sequential commander that picks a sub-pattern based on request complexity; reusing a shared review step across multiple larger workflows; quality gates that only apply to certain branches.
 
 ---
 
