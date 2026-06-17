@@ -1,21 +1,8 @@
 # openflow
 
-> ⚠️ **BETA — IN ACTIVE DEVELOPMENT**  
-> APIs, config formats, and agent behaviour will change between versions. Not recommended for production use.
+> ⚠️ **BETA** — APIs and config formats will change. Not for production use.
 
 Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define named sequences of specialised agents and run them with a single slash command. Seven coordination patterns are available — from simple pipelines to complexity-gated routing, parallel execution, and iterative quality loops.
-
-```
-/workflow feature
-
-Running workflow feature: composer → coder → analyzer
-
-Step 1/3 → composer   Produced task brief with acceptance criteria
-Step 2/3 → coder      Fixed return a - b → return a + b, updated comment
-Step 3/3 → analyzer   PASS — change is correct, minimal, no regressions
-
-Workflow complete ✅
-```
 
 ---
 
@@ -97,7 +84,7 @@ See [Configuration](#3-configuration) for all patterns and [Options](#4-options)
 opencode
 ```
 
-OpenCode loads the MCP server on startup. Six tools become available to the commander: `delegate_task`, `run_workflow`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`.
+OpenCode loads the MCP server on startup. Eight tools become available to the commander: `delegate_task`, `run_workflow`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
 
 ---
 
@@ -124,7 +111,7 @@ It should return null instead.
 /workflow
 ```
 
-The commander calls `list_workflows` and displays what's defined in `openflow.json`. Disabled workflows are not shown.
+The commander calls `list_workflows` and displays what's defined in `openflow.json`. Disabled workflows are not shown by default — ask to include them to see the full list.
 
 ### Create a workflow
 
@@ -144,9 +131,24 @@ TypeScript functions. It should be read-only with no bash access.
 
 The commander calls `create_agent` and writes to `opencode.json`. **Restart OpenCode** after creating an agent before it can be used in workflows.
 
-### Disable a workflow
+### Enable and disable workflows
 
-Add `"disabled": true` to any workflow in `openflow.json`. The workflow is hidden from `list_workflows` and cannot be run, but stays in the file so it can be re-enabled later.
+```
+Disable the "draft-feature" workflow.
+Enable the "draft-feature" workflow.
+```
+
+The commander calls `disable_workflow` or `enable_workflow`. Disabled workflows are hidden from `list_workflows` and cannot be run, but the definition is preserved and can be re-enabled at any time.
+
+To see disabled workflows alongside enabled ones:
+
+```
+List all workflows including disabled ones.
+```
+
+The commander calls `list_workflows` with `include_disabled: true`. Disabled entries are marked `[disabled]` in the output.
+
+You can also set the flag directly in `openflow.json`:
 
 ```json
 {
@@ -392,7 +394,7 @@ Accepted by all patterns:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `description` | string | — | Human-readable summary shown by `list_workflows` |
-| `disabled` | boolean | `false` | Hide from `list_workflows` and block execution. Agent references in disabled workflows are not validated, so you can safely disable workflows that reference deprecated agents. |
+| `disabled` | boolean | `false` | Hide from `list_workflows` and block execution. Can be toggled via the `enable_workflow` and `disable_workflow` tools. Agent references are not validated for disabled workflows. |
 
 ### Agent fields
 
