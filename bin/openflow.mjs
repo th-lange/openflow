@@ -99,18 +99,17 @@ async function install(targetDir) {
   }
 
   // ── /workflow slash command ──────────────────────────────────────────────────
-  // OpenCode loads slash commands from markdown files in <config>/commands/
-  const workflowCmd = resolve(dir, "commands", "workflow.md");
-  if (!(await fileExists(workflowCmd))) {
-    const cmdBody = [
-      "---",
-      "description: Run a named openflow workflow, e.g. /workflow feature",
-      "---",
-      "Run workflow: $ARGUMENTS",
-      "",
-    ].join("\n");
-    await mkdir(dirname(workflowCmd), { recursive: true });
-    await writeFile(workflowCmd, cmdBody, "utf-8");
+  // Uses the JSON "command" config key so OpenCode routes to commander automatically,
+  // regardless of which agent the user currently has active.
+  const command = config.command ?? {};
+  if (!command.workflow) {
+    command.workflow = {
+      description: "Run a named openflow workflow",
+      agent: "commander",
+      template: "Run workflow: $ARGUMENTS",
+    };
+    config.command = command;
+    changed = true;
     console.log("  ✓ /workflow command registered");
   } else {
     console.log("  · /workflow command already configured — skipping");

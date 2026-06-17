@@ -54,7 +54,7 @@ To install into a specific project instead:
 openflow install /path/to/project
 ```
 
-Either way, the command writes the MCP server entry and agents to `opencode.jsonc` / `opencode.json`, and adds a `commands/workflow.md` file that registers the `/workflow` slash command. Re-running is safe — existing entries are never overwritten.
+Either way, the command writes the MCP server entry, the `/workflow` slash command, and all agent definitions to `opencode.jsonc` / `opencode.json`. Re-running is safe — existing entries are never overwritten.
 
 ### 1.3 Create `openflow.json` in your project
 
@@ -82,15 +82,13 @@ opencode
 
 OpenCode loads the MCP server on startup. Eight tools become available: `delegate_task`, `run_workflow`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
 
-The `/workflow` slash command sends "Run workflow: \<name\>" to whichever agent is active in the session — use the `commander` agent for it to work correctly.
+The `/workflow` command routes directly to the `commander` agent regardless of which agent is currently active in your session.
 
 ---
 
 ## 2. Usage
 
 ### Run a workflow
-
-Start OpenCode with the `commander` agent and use the `/workflow` slash command:
 
 ```
 /workflow feature
