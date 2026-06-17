@@ -37,11 +37,12 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
   const w = raw as Record<string, unknown>;
   const pattern = (w["pattern"] as string) ?? "sequential";
   const description = typeof w["description"] === "string" ? w["description"] : undefined;
+  const disabled = w["disabled"] === true ? true : undefined;
 
   switch (pattern) {
     case "orchestrator":
       return {
-        name, pattern: "orchestrator", description,
+        name, pattern: "orchestrator", description, disabled,
         agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
         maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 6,
         satisfactionCriteria: typeof w["satisfactionCriteria"] === "string" ? w["satisfactionCriteria"] : "",
@@ -49,7 +50,7 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
 
     case "evaluator-optimizer":
       return {
-        name, pattern: "evaluator-optimizer", description,
+        name, pattern: "evaluator-optimizer", description, disabled,
         producer: typeof w["producer"] === "string" ? w["producer"] : "",
         evaluator: typeof w["evaluator"] === "string" ? w["evaluator"] : "",
         maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 3,
@@ -64,7 +65,7 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
           }))
         : [];
       return {
-        name, pattern: "conditional", description,
+        name, pattern: "conditional", description, disabled,
         router: typeof w["router"] === "string" ? w["router"] : "",
         routes,
         default: typeof w["default"] === "string" ? w["default"] : "",
@@ -73,7 +74,7 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
 
     case "fanout":
       return {
-        name, pattern: "fanout", description,
+        name, pattern: "fanout", description, disabled,
         agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
         picker: typeof w["picker"] === "string" ? w["picker"] : "",
         pickerPrompt: typeof w["pickerPrompt"] === "string" ? w["pickerPrompt"] : undefined,
@@ -87,7 +88,7 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
           }))
         : [];
       return {
-        name, pattern: "parallel", description,
+        name, pattern: "parallel", description, disabled,
         subtasks,
         merger: typeof w["merger"] === "string" ? w["merger"] : "",
       };
@@ -95,7 +96,7 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
 
     case "debate":
       return {
-        name, pattern: "debate", description,
+        name, pattern: "debate", description, disabled,
         proposer: typeof w["proposer"] === "string" ? w["proposer"] : "",
         critic: typeof w["critic"] === "string" ? w["critic"] : "",
         rounds: typeof w["rounds"] === "number" ? w["rounds"] : 2,
@@ -104,7 +105,7 @@ function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
 
     default:
       return {
-        name, pattern: "sequential", description,
+        name, pattern: "sequential", description, disabled,
         sequence: Array.isArray(w["sequence"])
           ? (w["sequence"] as unknown[]).map(parseSequenceStep)
           : [],
@@ -153,10 +154,17 @@ export async function getWorkflow(
   }
   const raw = (workflows as Record<string, unknown>)[name];
   if (!raw || typeof raw !== "object") {
-    const available = Object.keys(workflows as object).join(", ");
+    const available = Object.keys(workflows as object)
+      .filter((k) => (workflows as Record<string, unknown>)[k] &&
+        (workflows as Record<string, Record<string, unknown>>)[k]["disabled"] !== true)
+      .join(", ");
     throw new Error(`Workflow "${name}" not found. Available: ${available || "(none)"}`);
   }
-  return parseWorkflowEntry(name, raw);
+  const parsed = parseWorkflowEntry(name, raw);
+  if (parsed.disabled) {
+    throw new Error(`Workflow "${name}" is disabled`);
+  }
+  return parsed;
 }
 
 export async function listWorkflows(
@@ -165,7 +173,7 @@ export async function listWorkflows(
   const config = await readOpenflowJson(directory);
   const workflows = config["workflows"];
   if (!workflows || typeof workflows !== "object") return [];
-  return Object.entries(workflows as Record<string, unknown>).map(([name, raw]) =>
-    parseWorkflowEntry(name, raw)
-  );
+  return Object.entries(workflows as Record<string, unknown>)
+    .map(([name, raw]) => parseWorkflowEntry(name, raw))
+    .filter((w) => !w.disabled);
 }

@@ -95,6 +95,30 @@
       "agents": ["composer", "coder", "analyzer"],
       "maxIterations": 6,
       "satisfactionCriteria": "The implementation is complete and correct, and the analyzer has confirmed no issues."
+    },
+    "implement-simple": {
+      "description": "Fast implementation for trivial tasks — no review step",
+      "sequence": ["coder-weak"],
+      "commanderMayAlsoUse": ["coder-weak"]
+    },
+    "implement-premium": {
+      "description": "High-quality implementation for complex tasks — iterates until analyzer approves",
+      "pattern": "evaluator-optimizer",
+      "producer": "coder-strong",
+      "evaluator": "analyzer",
+      "maxIterations": 4,
+      "passCriteria": "PASS"
+    },
+    "smart-implement": {
+      "description": "Complexity-gated implementation — routes to the right coder automatically based on task complexity",
+      "pattern": "conditional",
+      "router": "complexity-gate",
+      "routes": [
+        { "condition": "simple",  "workflow": "implement-simple" },
+        { "condition": "medium",  "workflow": "implement" },
+        { "condition": "complex", "workflow": "implement-premium" }
+      ],
+      "default": "implement"
     }
   }
 }

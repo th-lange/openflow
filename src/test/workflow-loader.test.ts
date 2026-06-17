@@ -718,4 +718,53 @@ describe("workflow-loader", () => {
       }
     );
   });
+
+  // ── disabled workflows ────────────────────────────────────────────────────
+
+  it("loads a disabled workflow and sets disabled=true", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          w: { disabled: true, sequence: ["coder"], commanderMayAlsoUse: [] },
+        },
+      }),
+      async (dir) => {
+        // "coder" agent is NOT in the client — disabled workflows skip agent validation
+        const client = makeClient([]);
+        const registry = await loadWorkflows(client, dir);
+        assert.equal(registry["w"].disabled, true);
+      }
+    );
+  });
+
+  it("disabled workflow skips agent existence validation", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          live: { sequence: ["coder"], commanderMayAlsoUse: [] },
+          off: { disabled: true, sequence: ["ghost-agent"], commanderMayAlsoUse: [] },
+        },
+      }),
+      async (dir) => {
+        // "ghost-agent" does not exist but should not cause a throw
+        const client = makeClient(["coder"]);
+        const registry = await loadWorkflows(client, dir);
+        assert.equal(registry["off"].disabled, true);
+        assert.equal(registry["live"].disabled, undefined);
+      }
+    );
+  });
+
+  it("disabled flag does not affect workflow structure validation", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { disabled: true, pattern: "evaluator-optimizer" } },
+      }),
+      async (dir) => {
+        const client = makeClient([]);
+        // Missing required "producer" field → still throws even when disabled
+        await assert.rejects(() => loadWorkflows(client, dir), /producer/);
+      }
+    );
+  });
 });

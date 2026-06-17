@@ -10,6 +10,7 @@ export type SequenceStep = string | { checkpoint: string } | { workflow: string 
 export type SequentialWorkflow = {
   pattern: "sequential";
   description?: string;
+  disabled?: boolean;
   sequence: SequenceStep[];
   commanderMayAlsoUse: string[];
 };
@@ -17,6 +18,7 @@ export type SequentialWorkflow = {
 export type OrchestratorWorkflow = {
   pattern: "orchestrator";
   description?: string;
+  disabled?: boolean;
   agents: string[];
   maxIterations: number;
   satisfactionCriteria: string;
@@ -25,6 +27,7 @@ export type OrchestratorWorkflow = {
 export type EvaluatorOptimizerWorkflow = {
   pattern: "evaluator-optimizer";
   description?: string;
+  disabled?: boolean;
   producer: string;
   evaluator: string;
   maxIterations: number;
@@ -34,6 +37,7 @@ export type EvaluatorOptimizerWorkflow = {
 export type ConditionalWorkflow = {
   pattern: "conditional";
   description?: string;
+  disabled?: boolean;
   router: string;
   routes: Array<{ condition: string; workflow: string }>;
   default: string;
@@ -42,6 +46,7 @@ export type ConditionalWorkflow = {
 export type FanoutWorkflow = {
   pattern: "fanout";
   description?: string;
+  disabled?: boolean;
   agents: string[];
   picker: string;
   pickerPrompt?: string;
@@ -50,6 +55,7 @@ export type FanoutWorkflow = {
 export type ParallelWorkflow = {
   pattern: "parallel";
   description?: string;
+  disabled?: boolean;
   subtasks: Array<{ agent: string; prompt: string }>;
   merger: string;
 };
@@ -57,6 +63,7 @@ export type ParallelWorkflow = {
 export type DebateWorkflow = {
   pattern: "debate";
   description?: string;
+  disabled?: boolean;
   proposer: string;
   critic: string;
   rounds: number;
@@ -108,9 +115,10 @@ export async function loadWorkflows(
     registry[name] = validateWorkflow(name, entry);
   }
 
-  // 1. Validate all referenced agents exist
+  // 1. Validate all referenced agents exist (skip disabled workflows)
   const agentNames = new Set<string>();
   for (const w of Object.values(registry)) {
+    if (w.disabled) continue;
     switch (w.pattern) {
       case "sequential":
         for (const step of w.sequence) {
@@ -259,15 +267,20 @@ function validateWorkflow(name: string, raw: unknown): Workflow {
   }
   const w = raw as Record<string, unknown>;
   const pattern = w["pattern"] ?? "sequential";
+  const disabled = w["disabled"] === true ? true : undefined;
 
-  if (pattern === "sequential") return validateSequentialWorkflow(name, w);
-  if (pattern === "orchestrator") return validateOrchestratorWorkflow(name, w);
-  if (pattern === "evaluator-optimizer") return validateEvaluatorOptimizerWorkflow(name, w);
-  if (pattern === "conditional") return validateConditionalWorkflow(name, w);
-  if (pattern === "fanout") return validateFanoutWorkflow(name, w);
-  if (pattern === "parallel") return validateParallelWorkflow(name, w);
-  if (pattern === "debate") return validateDebateWorkflow(name, w);
-  throw new Error(`Workflow "${name}": unknown pattern "${pattern}"`);
+  let result: Workflow;
+  if (pattern === "sequential") result = validateSequentialWorkflow(name, w);
+  else if (pattern === "orchestrator") result = validateOrchestratorWorkflow(name, w);
+  else if (pattern === "evaluator-optimizer") result = validateEvaluatorOptimizerWorkflow(name, w);
+  else if (pattern === "conditional") result = validateConditionalWorkflow(name, w);
+  else if (pattern === "fanout") result = validateFanoutWorkflow(name, w);
+  else if (pattern === "parallel") result = validateParallelWorkflow(name, w);
+  else if (pattern === "debate") result = validateDebateWorkflow(name, w);
+  else throw new Error(`Workflow "${name}": unknown pattern "${pattern}"`);
+
+  if (disabled) return { ...result, disabled } as Workflow;
+  return result;
 }
 
 function validateSequentialWorkflow(name: string, w: Record<string, unknown>): SequentialWorkflow {
