@@ -1,20 +1,51 @@
 #!/usr/bin/env node
 import { readFile, writeFile, access, mkdir } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// OpenCode global config dir: respects XDG_CONFIG_HOME, falls back to ~/.config/opencode
+// Windows: %APPDATA%\opencode
+function openCodeGlobalDir() {
+  if (process.platform === "win32") {
+    return resolve(process.env.APPDATA ?? resolve(homedir(), "AppData", "Roaming"), "opencode");
+  }
+  const xdg = process.env.XDG_CONFIG_HOME ?? resolve(homedir(), ".config");
+  return resolve(xdg, "opencode");
+}
 
 async function fileExists(path) {
   try { await access(path); return true; } catch { return false; }
 }
 
-async function readJson(path) {
+// Resolve which config file to read/write in a directory.
+// Prefers opencode.json; falls back to opencode.jsonc if it exists and .json doesn't.
+// Always writes to opencode.json (safe alongside an existing .jsonc).
+async function resolveConfigPath(dir) {
+  const jsonPath  = resolve(dir, "opencode.json");
+  const jsoncPath = resolve(dir, "opencode.jsonc");
+  if (await fileExists(jsonPath))  return { read: jsonPath,  write: jsonPath };
+  if (await fileExists(jsoncPath)) return { read: jsoncPath, write: jsonPath, hadJsonc: true };
+  return { read: jsonPath, write: jsonPath };
+}
+
+// Strip // and /* */ comments so we can JSON.parse a .jsonc file
+function stripJsoncComments(src) {
+  return src
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+async function readConfig(path) {
   try {
-    return JSON.parse(await readFile(path, "utf-8"));
+    const raw = await readFile(path, "utf-8");
+    const text = path.endsWith(".jsonc") ? stripJsoncComments(raw) : raw;
+    return JSON.parse(text);
   } catch (e) {
     if (e.code === "ENOENT") return {};
-    throw e;
+    throw new Error(`Could not read ${path}: ${e.message}`);
   }
 }
 
@@ -23,9 +54,17 @@ async function writeJson(path, data) {
   await writeFile(path, JSON.stringify(data, null, 2) + "\n", "utf-8");
 }
 
-async function install(targetDir = process.cwd()) {
-  const targetPath = resolve(targetDir, "opencode.json");
-  const config = await readJson(targetPath);
+async function install(targetDir) {
+  const dir = targetDir ?? openCodeGlobalDir();
+  const { read, write, hadJsonc } = await resolveConfigPath(dir);
+
+  console.log(`  Target: ${write}`);
+  if (hadJsonc) {
+    console.log("  Note: found opencode.jsonc — writing to opencode.json alongside it.");
+    console.log("        Merge them manually if OpenCode only loads one file.\n");
+  }
+
+  const config = await readConfig(read);
   let changed = false;
 
   // ── MCP server ──────────────────────────────────────────────────────────────
@@ -60,7 +99,7 @@ async function install(targetDir = process.cwd()) {
   }
 
   // ── agents ───────────────────────────────────────────────────────────────────
-  const srcAgents = (await readJson(resolve(PKG_ROOT, "opencode.json"))).agent ?? {};
+  const srcAgents = (await readConfig(resolve(PKG_ROOT, "opencode.json"))).agent ?? {};
   const agents = config.agent ?? {};
   const added = [];
   const skipped = [];
@@ -82,10 +121,10 @@ async function install(targetDir = process.cwd()) {
   }
 
   if (changed) {
-    await writeJson(targetPath, config);
-    console.log(`\n  Wrote ${targetPath}`);
+    await writeJson(write, config);
+    console.log(`\n  Wrote ${write}`);
   } else {
-    console.log("\n  opencode.json is already fully configured — nothing to change.");
+    console.log("\n  Already fully configured — nothing to change.");
   }
   console.log("  Restart OpenCode to activate the /workflow command.\n");
 }
@@ -93,8 +132,10 @@ async function install(targetDir = process.cwd()) {
 const [,, cmd, ...args] = process.argv;
 
 if (!cmd || cmd === "help" || cmd === "--help") {
+  const globalDir = openCodeGlobalDir();
   console.log("Usage: openflow install [directory]");
-  console.log("  Configures openflow in opencode.json of the target directory (default: cwd)");
+  console.log(`  Installs into OpenCode global config by default (${globalDir})`);
+  console.log("  Pass a directory to install into a specific project instead.");
 } else if (cmd === "install") {
   console.log("\nConfiguring openflow...\n");
   try {

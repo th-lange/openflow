@@ -39,19 +39,21 @@ npm install
 
 ### 1.2 Configure your project
 
-In your project directory, run:
+Run in any directory:
 
 ```bash
 openflow install
 ```
 
-This writes the MCP server reference, `/workflow` command, and all agent definitions into your project's `opencode.json`, creating it if it doesn't exist. Re-running is safe — existing entries are never overwritten.
+With no argument, this installs into OpenCode's global config (`~/.config/opencode/opencode.json`, or `%APPDATA%\opencode` on Windows), so the openflow tools and agents are available in every project automatically.
 
-You can also target a specific directory:
+To install into a specific project instead:
 
 ```bash
 openflow install /path/to/project
 ```
+
+Either way, the command writes the MCP server reference, `/workflow` command, and all agent definitions. Re-running is safe — existing entries are never overwritten.
 
 ### 1.3 Create `openflow.json` in your project
 
