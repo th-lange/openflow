@@ -21,14 +21,14 @@ async function fileExists(path) {
 }
 
 // Resolve which config file to read/write in a directory.
-// Prefers opencode.json; falls back to opencode.jsonc if it exists and .json doesn't.
-// Always writes to opencode.json (safe alongside an existing .jsonc).
+// Prefers .jsonc over .json — OpenCode uses .jsonc as its primary format.
+// Reads and writes the same file; never creates a sibling file of the other type.
 async function resolveConfigPath(dir) {
-  const jsonPath  = resolve(dir, "opencode.json");
   const jsoncPath = resolve(dir, "opencode.jsonc");
+  const jsonPath  = resolve(dir, "opencode.json");
+  if (await fileExists(jsoncPath)) return { read: jsoncPath, write: jsoncPath };
   if (await fileExists(jsonPath))  return { read: jsonPath,  write: jsonPath };
-  if (await fileExists(jsoncPath)) return { read: jsoncPath, write: jsonPath, hadJsonc: true };
-  return { read: jsonPath, write: jsonPath };
+  return { read: jsonPath, write: jsonPath }; // neither exists — create .json
 }
 
 // Strip // and /* */ comments so we can JSON.parse a .jsonc file
@@ -59,10 +59,6 @@ async function install(targetDir) {
   const { read, write, hadJsonc } = await resolveConfigPath(dir);
 
   console.log(`  Target: ${write}`);
-  if (hadJsonc) {
-    console.log("  Note: found opencode.jsonc — writing to opencode.json alongside it.");
-    console.log("        Merge them manually if OpenCode only loads one file.\n");
-  }
 
   const config = await readConfig(read);
   let changed = false;
