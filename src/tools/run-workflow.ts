@@ -7,6 +7,14 @@ import { runParallel } from "./run-parallel.js";
 import { runDebate } from "./run-debate.js";
 import type { SequentialWorkflow } from "../config/workflow-loader.js";
 
+type StepResult = { label: string; output: string };
+
+function stepLabel(step: SequentialWorkflow["sequence"][number]): string {
+  if (typeof step === "string") return step;
+  if ("workflow" in step) return `[${step.workflow}]`;
+  return "[checkpoint]";
+}
+
 // ── Sequential ────────────────────────────────────────────────────────────────
 
 export async function runSequential(
@@ -14,39 +22,45 @@ export async function runSequential(
   prompt: string,
   initialContext: string | undefined,
   sessionId: string | undefined,
-  serverUrl: string
+  serverUrl: string,
+  workDir: string,
+  dispatch: typeof runWorkflow
 ): Promise<string> {
   const { sequence } = workflow;
-
-  // Checkpoint steps cannot pause inside a code-driven executor — reject at runtime
-  if (sequence.some((step) => typeof step !== "string")) {
-    throw new Error(
-      "This workflow contains checkpoint steps and must be handled interactively by the commander. " +
-        "Do not call run_workflow for it — step through the sequence manually via delegate_task."
-    );
-  }
-
-  const agentSteps = sequence as string[];
-  const stepResults: Array<{ agent: string; output: string }> = [];
+  const stepResults: StepResult[] = [];
   let context = initialContext ?? "";
 
-  for (const agent of agentSteps) {
-    const { result } = await delegateTask({ agent, prompt, context, sessionId }, serverUrl);
-    stepResults.push({ agent, output: result });
+  for (const step of sequence) {
+    let output: string;
 
+    if (typeof step === "string") {
+      ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, serverUrl));
+    } else if ("workflow" in step) {
+      output = await dispatch(step.workflow, prompt, context, sessionId, serverUrl, workDir);
+    } else {
+      // checkpoint — top-level commander handles these; if we get here it means
+      // something bypassed the load-time checkpoint-reference constraint
+      throw new Error(
+        "Checkpoint steps cannot be executed via run_workflow. " +
+          "The commander must handle this workflow step-by-step."
+      );
+    }
+
+    stepResults.push({ label: stepLabel(step), output });
     context = [
       "## Prior step results",
       "",
-      ...stepResults.map(({ agent, output }, idx) => `### Step ${idx + 1} — ${agent}\n${output}`),
+      ...stepResults.map(({ label, output }, idx) => `### Step ${idx + 1} — ${label}\n${output}`),
     ].join("\n");
   }
 
-  const total = agentSteps.length;
+  const total = sequence.length;
+  const header = `Workflow complete ✅ (${sequence.map(stepLabel).join(" → ")})`;
   return [
-    `Workflow complete ✅ (${agentSteps.join(" → ")})`,
+    header,
     "",
-    ...stepResults.flatMap(({ agent, output }, idx) => [
-      `## Step ${idx + 1}/${total} — ${agent}`,
+    ...stepResults.flatMap(({ label, output }, idx) => [
+      `## Step ${idx + 1}/${total} — ${label}`,
       output,
       "",
     ]),
@@ -67,7 +81,7 @@ export async function runWorkflow(
 
   switch (workflow.pattern) {
     case "sequential":
-      return runSequential(workflow, prompt, context, sessionId, serverUrl);
+      return runSequential(workflow, prompt, context, sessionId, serverUrl, workDir, runWorkflow);
     case "evaluator-optimizer":
       return runEvaluatorOptimizer(workflow, prompt, context, sessionId, serverUrl);
     case "conditional":

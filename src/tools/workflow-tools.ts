@@ -22,12 +22,10 @@ async function readOpenflowJson(directory: string): Promise<Record<string, unkno
 
 function parseSequenceStep(item: unknown): SequenceStep {
   if (typeof item === "string") return item;
-  if (
-    typeof item === "object" &&
-    item !== null &&
-    typeof (item as Record<string, unknown>)["checkpoint"] === "string"
-  ) {
-    return { checkpoint: (item as Record<string, unknown>)["checkpoint"] as string };
+  if (typeof item === "object" && item !== null) {
+    const obj = item as Record<string, unknown>;
+    if (typeof obj["checkpoint"] === "string") return { checkpoint: obj["checkpoint"] };
+    if (typeof obj["workflow"] === "string") return { workflow: obj["workflow"] };
   }
   return String(item);
 }
@@ -121,7 +119,13 @@ export function summariseWorkflow(w: WorkflowInfo): string {
   switch (w.pattern) {
     case "sequential":
       return w.sequence
-        .map((s) => (typeof s === "string" ? s : "[checkpoint]"))
+        .map((s) =>
+          typeof s === "string"
+            ? s
+            : "workflow" in s
+            ? `[${s.workflow}]`
+            : "[checkpoint]"
+        )
         .join(" → ");
     case "orchestrator":
       return `orchestrator [${w.agents.join(", ")}] max=${w.maxIterations}`;

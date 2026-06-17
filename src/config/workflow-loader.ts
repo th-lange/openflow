@@ -5,7 +5,7 @@ import { assertAgentExists } from "./agent-registry.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type SequenceStep = string | { checkpoint: string };
+export type SequenceStep = string | { checkpoint: string } | { workflow: string };
 
 export type SequentialWorkflow = {
   pattern: "sequential";
@@ -108,7 +108,7 @@ export async function loadWorkflows(
     registry[name] = validateWorkflow(name, entry);
   }
 
-  // Validate all referenced agents exist
+  // 1. Validate all referenced agents exist
   const agentNames = new Set<string>();
   for (const w of Object.values(registry)) {
     switch (w.pattern) {
@@ -147,7 +147,7 @@ export async function loadWorkflows(
     await assertAgentExists(client, name);
   }
 
-  // Validate conditional workflow references
+  // 2. Validate workflow references in conditional routes
   for (const [name, w] of Object.entries(registry)) {
     if (w.pattern !== "conditional") continue;
     for (const route of w.routes) {
@@ -164,7 +164,91 @@ export async function loadWorkflows(
     }
   }
 
+  // 3. Validate workflow references in sequential sequences
+  for (const [name, w] of Object.entries(registry)) {
+    if (w.pattern !== "sequential") continue;
+    for (const step of w.sequence) {
+      if (typeof step === "object" && "workflow" in step) {
+        if (!registry[step.workflow]) {
+          throw new Error(
+            `Sequential workflow "${name}": step references unknown workflow "${step.workflow}"`
+          );
+        }
+      }
+    }
+  }
+
+  // 4. Checkpoint constraint: checkpoint workflows cannot be referenced by other workflows
+  validateNoCheckpointReferences(registry);
+
+  // 5. Cycle detection across all workflow references
+  detectCycles(registry);
+
   return registry;
+}
+
+// ── Reference graph helpers ───────────────────────────────────────────────────
+
+function workflowRefs(w: Workflow): string[] {
+  if (w.pattern === "sequential") {
+    return w.sequence
+      .filter((s): s is { workflow: string } => typeof s === "object" && "workflow" in s)
+      .map((s) => s.workflow);
+  }
+  if (w.pattern === "conditional") {
+    return [...w.routes.map((r) => r.workflow), w.default];
+  }
+  return [];
+}
+
+function validateNoCheckpointReferences(registry: WorkflowRegistry): void {
+  const checkpointWorkflows = new Set(
+    Object.entries(registry)
+      .filter(
+        ([, w]) =>
+          w.pattern === "sequential" &&
+          w.sequence.some((s) => typeof s === "object" && "checkpoint" in s)
+      )
+      .map(([name]) => name)
+  );
+  if (checkpointWorkflows.size === 0) return;
+
+  for (const [name, w] of Object.entries(registry)) {
+    for (const ref of workflowRefs(w)) {
+      if (checkpointWorkflows.has(ref)) {
+        throw new Error(
+          `Workflow "${name}" references "${ref}" which contains checkpoint steps. ` +
+            `Checkpoint workflows must be top-level (not referenced by other workflows). ` +
+            `Hoist the checkpoint to the hosting sequence or inline the steps from "${ref}".`
+        );
+      }
+    }
+  }
+}
+
+function detectCycles(registry: WorkflowRegistry): void {
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+
+  function dfs(name: string, path: string[]): void {
+    if (visiting.has(name)) {
+      const from = path.indexOf(name);
+      throw new Error(
+        `Workflow cycle detected: ${[...path.slice(from), name].join(" → ")}`
+      );
+    }
+    if (visited.has(name)) return;
+    visiting.add(name);
+    for (const ref of workflowRefs(registry[name] ?? ({} as Workflow))) {
+      dfs(ref, [...path, name]);
+    }
+    visiting.delete(name);
+    visited.add(name);
+  }
+
+  for (const name of Object.keys(registry)) {
+    dfs(name, []);
+  }
 }
 
 // ── Validators ────────────────────────────────────────────────────────────────
@@ -194,15 +278,22 @@ function validateSequentialWorkflow(name: string, w: Record<string, unknown>): S
   for (const item of w["sequence"]) {
     if (typeof item === "string") {
       sequence.push(item);
-    } else if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as Record<string, unknown>)["checkpoint"] === "string"
-    ) {
-      sequence.push({ checkpoint: (item as Record<string, unknown>)["checkpoint"] as string });
+    } else if (typeof item === "object" && item !== null) {
+      const obj = item as Record<string, unknown>;
+      if (typeof obj["checkpoint"] === "string") {
+        sequence.push({ checkpoint: obj["checkpoint"] });
+      } else if (typeof obj["workflow"] === "string") {
+        sequence.push({ workflow: obj["workflow"] });
+      } else {
+        throw new Error(
+          `Workflow "${name}": sequence items must be agent name strings, ` +
+            `{ "checkpoint": "message" } objects, or { "workflow": "name" } references`
+        );
+      }
     } else {
       throw new Error(
-        `Workflow "${name}": sequence items must be agent name strings or { "checkpoint": "message" } objects`
+        `Workflow "${name}": sequence items must be agent name strings, ` +
+          `{ "checkpoint": "message" } objects, or { "workflow": "name" } references`
       );
     }
   }
@@ -232,9 +323,7 @@ function validateOrchestratorWorkflow(name: string, w: Record<string, unknown>):
     throw new Error(`Orchestrator workflow "${name}" must have a non-empty "agents" array`);
   }
   for (const item of w["agents"]) {
-    if (typeof item !== "string") {
-      throw new Error(`Workflow "${name}": agents items must be strings`);
-    }
+    if (typeof item !== "string") throw new Error(`Workflow "${name}": agents items must be strings`);
   }
   const maxIterations = w["maxIterations"];
   if (maxIterations !== undefined && (typeof maxIterations !== "number" || maxIterations < 1)) {
@@ -320,9 +409,7 @@ function validateFanoutWorkflow(name: string, w: Record<string, unknown>): Fanou
     throw new Error(`Fan-out workflow "${name}" must have a non-empty "agents" array`);
   }
   for (const item of w["agents"]) {
-    if (typeof item !== "string") {
-      throw new Error(`Workflow "${name}": agents items must be strings`);
-    }
+    if (typeof item !== "string") throw new Error(`Workflow "${name}": agents items must be strings`);
   }
   if (typeof w["picker"] !== "string" || !w["picker"].trim()) {
     throw new Error(`Fan-out workflow "${name}" must have a non-empty "picker" string`);

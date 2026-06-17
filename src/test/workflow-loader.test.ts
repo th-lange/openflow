@@ -616,6 +616,94 @@ describe("workflow-loader", () => {
     );
   });
 
+  // ── composition (#30) ──────────────────────────────────────────────────────
+
+  it("loads a sequential workflow with a workflow-reference step", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          inner: { sequence: ["coder"], commanderMayAlsoUse: [] },
+          outer: { sequence: ["composer", { workflow: "inner" }, "analyzer"] },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["composer", "coder", "analyzer"]);
+        const registry = await loadWorkflows(client, dir);
+        const w = registry["outer"];
+        if (w.pattern !== "sequential") throw new Error("type guard");
+        assert.deepEqual(w.sequence, ["composer", { workflow: "inner" }, "analyzer"]);
+      }
+    );
+  });
+
+  it("throws when a sequential workflow references an unknown workflow", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { w: { sequence: [{ workflow: "ghost" }] } },
+      }),
+      async (dir) => {
+        const client = makeClient([]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /unknown workflow "ghost"/
+        );
+      }
+    );
+  });
+
+  it("throws on self-referencing cycle", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: { loop: { sequence: [{ workflow: "loop" }] } },
+      }),
+      async (dir) => {
+        const client = makeClient([]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /cycle detected/
+        );
+      }
+    );
+  });
+
+  it("throws on indirect cycle A → B → A", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          a: { sequence: [{ workflow: "b" }] },
+          b: { sequence: [{ workflow: "a" }] },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient([]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /cycle detected/
+        );
+      }
+    );
+  });
+
+  it("throws when a referenced workflow contains checkpoint steps", async () => {
+    await withFixture(
+      JSON.stringify({
+        workflows: {
+          gated: {
+            sequence: ["coder", { checkpoint: "Review before continuing." }, "analyzer"],
+          },
+          outer: { sequence: [{ workflow: "gated" }] },
+        },
+      }),
+      async (dir) => {
+        const client = makeClient(["coder", "analyzer"]);
+        await assert.rejects(
+          () => loadWorkflows(client, dir),
+          /checkpoint steps/
+        );
+      }
+    );
+  });
+
   it("throws on unknown pattern", async () => {
     await withFixture(
       JSON.stringify({

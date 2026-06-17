@@ -70,6 +70,25 @@
       "rounds": 2,
       "judge": "analyzer"
     },
+    "complexity-route": {
+      "description": "Route to quick or quality implementation based on task complexity",
+      "pattern": "conditional",
+      "router": "composer",
+      "routes": [
+        { "condition": "simple",  "workflow": "implement" },
+        { "condition": "complex", "workflow": "quality-implement" }
+      ],
+      "default": "implement"
+    },
+    "feature-smart": {
+      "description": "Feature development with complexity-based implementation routing",
+      "sequence": [
+        "composer",
+        { "workflow": "complexity-route" },
+        "analyzer"
+      ],
+      "commanderMayAlsoUse": ["composer", "coder", "analyzer"]
+    },
     "smart-dev": {
       "description": "Dynamic development — orchestrator chooses the right agents at runtime",
       "pattern": "orchestrator",
