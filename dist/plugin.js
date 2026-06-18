@@ -42,7 +42,7 @@ export const openflow = async ({ client, directory }) => {
                         return "No workflows defined in openflow.json.";
                     return workflows
                         .map((w) => {
-                        const tag = w.disabled ? " [disabled]" : "";
+                        const tag = `${w.disabled ? " [disabled]" : ""}${"locked" in w && w.locked ? " [locked]" : ""}`;
                         if (!isValidWorkflow(w))
                             return `- ${w.name}${tag} ⚠ invalid: ${w.error}`;
                         return `- ${w.name}${tag}${w.description ? `: ${w.description}` : ""} (${summariseWorkflow(w)})`;

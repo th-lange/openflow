@@ -4,6 +4,13 @@ import { assertAgentExists } from "../config/agent-registry.js";
 import { loadWorkflows, parseWorkflowEntry, } from "../config/workflow-loader.js";
 import { summariseWorkflow } from "./workflow-tools.js";
 import { readConfigObject, readConfigText, resolveConfigPath, setConfigValue, } from "../config/opencode-config.js";
+// Agent names reserved by openflow itself. They are shipped with the plugin and
+// must not be created or overwritten through create_agent (#51).
+const RESERVED_AGENTS = new Set(["workflow-builder"]);
+/** True when the raw on-disk workflow entry is marked `locked: true`. */
+function isLocked(entry) {
+    return typeof entry === "object" && entry !== null && entry["locked"] === true;
+}
 /** Assemble the raw config object that gets persisted, per pattern. */
 function buildEntry(input) {
     const pattern = input.pattern ?? "sequential";
@@ -83,6 +90,10 @@ export async function createWorkflow(input, client, directory = process.cwd()) {
     const config = await readConfigObject(path);
     const workflows = (config["workflows"] ?? {});
     const existed = Boolean(workflows[name]);
+    // Locked workflows are immutable — refuse even with force (#51).
+    if (existed && isLocked(workflows[name])) {
+        throw new Error(`Workflow "${name}" is locked and cannot be modified.`);
+    }
     if (existed && !force) {
         throw new Error(`Workflow "${name}" already exists. Pass force=true to overwrite.`);
     }
@@ -130,6 +141,9 @@ async function setWorkflowDisabled(name, disabled, directory) {
     if (!workflows[name]) {
         throw new Error(`Workflow "${name}" not found in openflow.json`);
     }
+    if (isLocked(workflows[name])) {
+        throw new Error(`Workflow "${name}" is locked and cannot be enabled or disabled.`);
+    }
     // `undefined` deletes the key (re-enabling); `true` disables.
     await setConfigValue(path, ["workflows", name, "disabled"], disabled ? true : undefined);
     const state = disabled ? "disabled" : "enabled";
@@ -147,6 +161,9 @@ export async function createAgent(input, directory = process.cwd()) {
         throw new Error("Agent name must not be empty");
     if (!prompt.trim())
         throw new Error("Agent prompt must not be empty");
+    if (RESERVED_AGENTS.has(name)) {
+        throw new Error(`Agent "${name}" is reserved by openflow and cannot be created or modified.`);
+    }
     // Resolve opencode.jsonc / opencode.json (prefer .jsonc) and write back to
     // the same file, preserving comments — see #35, #36.
     const { read, write } = await resolveConfigPath(directory);
