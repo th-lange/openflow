@@ -1,8 +1,11 @@
+import { writeFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { assertAgentExists } from "../config/agent-registry.js";
+import { loadWorkflows } from "../config/workflow-loader.js";
 import {
   readConfigObject,
+  readConfigText,
   resolveConfigPath,
   setConfigValue,
 } from "../config/opencode-config.js";
@@ -35,12 +38,22 @@ export async function createWorkflow(
   }
 
   const path = resolve(directory, "openflow.json");
+  const priorText = await readConfigText(path); // "" when the file does not yet exist
   const config = await readConfigObject(path);
   const workflows = (config["workflows"] ?? {}) as Record<string, unknown>;
   const existed = Boolean(workflows[name]);
 
   if (existed && !force) {
     throw new Error(`Workflow "${name}" already exists. Pass force=true to overwrite.`);
+  }
+
+  // Only enforce post-write validity if the file was already valid — otherwise a
+  // pre-existing unrelated problem would block every create_workflow call.
+  let wasValidBefore = true;
+  try {
+    await loadWorkflows(client, directory);
+  } catch {
+    wasValidBefore = false;
   }
 
   const entry = {
@@ -50,6 +63,17 @@ export async function createWorkflow(
   };
 
   await setConfigValue(path, ["workflows", name], entry);
+
+  if (wasValidBefore) {
+    try {
+      await loadWorkflows(client, directory); // re-validate refs + cycles (#34)
+    } catch (e) {
+      // Roll back the write so we never persist a workflow that breaks the registry.
+      if (priorText) await writeFile(path, priorText, "utf-8");
+      else await rm(path, { force: true });
+      throw e;
+    }
+  }
 
   return [
     `Workflow "${name}" ${existed ? "updated" : "created"} in openflow.json.`,

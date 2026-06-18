@@ -2,13 +2,21 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { delegateTask } from "./tools/delegate-task.js";
-import { getWorkflow, listWorkflows, summariseWorkflow } from "./tools/workflow-tools.js";
+import { getWorkflow, listWorkflows, summariseWorkflow, isValidWorkflow, } from "./tools/workflow-tools.js";
 import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "./tools/management-tools.js";
 import { runWorkflow } from "./tools/run-workflow.js";
+import { loadWorkflows } from "./config/workflow-loader.js";
 import { createOpencodeClient } from "@opencode-ai/sdk";
 const SERVER_URL = process.env.OPENCODE_URL ?? "http://127.0.0.1:4096";
 const WORK_DIR = process.env.OPENCODE_CWD ?? process.cwd();
 const client = createOpencodeClient({ baseUrl: SERVER_URL });
+// Validate openflow.json once at startup (#34). Errors (cycles, dangling
+// references, unknown agents, malformed patterns) are logged to stderr, which
+// OpenCode captures in its MCP server logs. We do not hard-exit: a single bad
+// workflow should not prevent the management tools from being used to fix it.
+loadWorkflows(client, WORK_DIR).catch((e) => {
+    console.error(`[openflow] openflow.json failed validation: ${e instanceof Error ? e.message : String(e)}`);
+});
 const server = new McpServer({
     name: "openflow",
     version: "1.0.0",
@@ -57,6 +65,10 @@ server.tool("list_workflows", "List workflows defined in openflow.json. By defau
     }
     const text = workflows
         .map((w) => {
+        if (!isValidWorkflow(w)) {
+            const tag = w.disabled ? " [disabled]" : "";
+            return `- ${w.name}${tag} ⚠ invalid: ${w.error}`;
+        }
         const tag = w.disabled ? " [disabled]" : "";
         return `- ${w.name}${tag}${w.description ? `: ${w.description}` : ""} (${summariseWorkflow(w)})`;
     })

@@ -68,5 +68,20 @@ export type DebateWorkflow = {
 };
 export type Workflow = SequentialWorkflow | OrchestratorWorkflow | EvaluatorOptimizerWorkflow | ConditionalWorkflow | FanoutWorkflow | ParallelWorkflow | DebateWorkflow;
 export type WorkflowRegistry = Record<string, Workflow>;
+/**
+ * Read and parse `openflow.json` (JSON or JSONC) from `directory`.
+ * Returns the parsed top-level value, or `undefined` when the file is absent.
+ * Throws when the file exists but is not valid JSON/JSONC.
+ *
+ * This is the one read path shared by the validating loader and the runtime
+ * lookup tools (see workflow-tools.ts) — #38.
+ */
+export declare function readOpenflowFile(directory?: string): Promise<unknown | undefined>;
 export declare function loadWorkflows(client: OpencodeClient, directory?: string): Promise<WorkflowRegistry>;
+/**
+ * Parse and validate a single workflow entry into a typed `Workflow`.
+ * Throws on malformed input. This is the canonical per-entry parser shared by
+ * the loader and the runtime lookup tools (#38).
+ */
+export declare function parseWorkflowEntry(name: string, raw: unknown): Workflow;
 //# sourceMappingURL=workflow-loader.d.ts.map

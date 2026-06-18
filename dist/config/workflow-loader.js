@@ -1,24 +1,40 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parse } from "jsonc-parser";
 import { assertAgentExists } from "./agent-registry.js";
-// ── Loader ────────────────────────────────────────────────────────────────────
-export async function loadWorkflows(client, directory = process.cwd()) {
+// ── File read (single source — JSONC-tolerant) ──────────────────────────────────
+/**
+ * Read and parse `openflow.json` (JSON or JSONC) from `directory`.
+ * Returns the parsed top-level value, or `undefined` when the file is absent.
+ * Throws when the file exists but is not valid JSON/JSONC.
+ *
+ * This is the one read path shared by the validating loader and the runtime
+ * lookup tools (see workflow-tools.ts) — #38.
+ */
+export async function readOpenflowFile(directory = process.cwd()) {
     const path = resolve(directory, "openflow.json");
     let raw;
     try {
         raw = await readFile(path, "utf-8");
     }
     catch {
+        return undefined;
+    }
+    if (!raw.trim())
         return {};
+    const errors = [];
+    const parsed = parse(raw, errors, { allowTrailingComma: true });
+    if (errors.length > 0) {
+        throw new Error("openflow.json is not valid JSON");
     }
-    let parsed;
-    try {
-        parsed = JSON.parse(raw);
-    }
-    catch (e) {
-        throw new Error(`openflow.json is not valid JSON: ${e.message}`);
-    }
-    if (typeof parsed !== "object" || parsed === null) {
+    return parsed;
+}
+// ── Loader ────────────────────────────────────────────────────────────────────
+export async function loadWorkflows(client, directory = process.cwd()) {
+    const parsed = await readOpenflowFile(directory);
+    if (parsed === undefined)
+        return {};
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
         throw new Error("openflow.json must be a JSON object");
     }
     const obj = parsed;
@@ -27,7 +43,7 @@ export async function loadWorkflows(client, directory = process.cwd()) {
         return {};
     const registry = {};
     for (const [name, entry] of Object.entries(rawWorkflows)) {
-        registry[name] = validateWorkflow(name, entry);
+        registry[name] = parseWorkflowEntry(name, entry);
     }
     // 1. Validate all referenced agents exist (skip disabled workflows)
     const agentNames = new Set();
@@ -156,7 +172,12 @@ function detectCycles(registry) {
     }
 }
 // ── Validators ────────────────────────────────────────────────────────────────
-function validateWorkflow(name, raw) {
+/**
+ * Parse and validate a single workflow entry into a typed `Workflow`.
+ * Throws on malformed input. This is the canonical per-entry parser shared by
+ * the loader and the runtime lookup tools (#38).
+ */
+export function parseWorkflowEntry(name, raw) {
     if (typeof raw !== "object" || raw === null) {
         throw new Error(`Workflow "${name}" must be an object`);
     }
