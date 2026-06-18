@@ -1,6 +1,6 @@
 {
   "name": "openflow",
-  "version": "0.1.0",
+  "version": "0.2.7",
   "description": "OpenCode workflow orchestration plugin",
   "bin": {
     "openflow": "bin/openflow.mjs"
