@@ -1,6 +1,6 @@
 {
   "name": "openflow",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "OpenCode workflow orchestration plugin",
   "bin": {
     "openflow": "bin/openflow.mjs"
@@ -8,6 +8,7 @@
   "files": [
     "bin/",
     "dist/",
+    "src/",
     "opencode.json",
     "openflow.json"
   ],
@@ -23,7 +24,15 @@
     "type": "git",
     "url": "git+https://github.com/th-lange/openflow.git"
   },
-  "keywords": [],
+  "keywords": [
+    "opencode",
+    "plugin",
+    "workflow",
+    "orchestration",
+    "agents",
+    "ai",
+    "mcp"
+  ],
   "author": "Thomas Lange",
   "license": "MIT",
   "type": "module",
