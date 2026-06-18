@@ -24,8 +24,8 @@
     "url": "git+https://github.com/th-lange/openflow.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Thomas Lange",
+  "license": "MIT",
   "type": "module",
   "bugs": {
     "url": "https://github.com/th-lange/openflow/issues"
@@ -34,6 +34,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "^1.17.7",
+    "jsonc-parser": "^3.3.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

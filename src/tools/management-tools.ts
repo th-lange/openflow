@@ -1,26 +1,11 @@
-import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { assertAgentExists } from "../config/agent-registry.js";
-
-// ── Shared helpers ────────────────────────────────────────────────────────────
-
-async function readJson(path: string): Promise<Record<string, unknown>> {
-  try {
-    const raw = await readFile(path, "utf-8");
-    const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch (e: any) {
-    if (e.code === "ENOENT") return {};
-    throw new Error(`Failed to read ${path}: ${e.message}`);
-  }
-}
-
-async function writeJson(path: string, data: unknown): Promise<void> {
-  await writeFile(path, JSON.stringify(data, null, 2) + "\n", "utf-8");
-}
+import {
+  readConfigObject,
+  resolveConfigPath,
+  setConfigValue,
+} from "../config/opencode-config.js";
 
 // ── create_workflow ───────────────────────────────────────────────────────────
 
@@ -50,13 +35,12 @@ export async function createWorkflow(
   }
 
   const path = resolve(directory, "openflow.json");
-  const config = await readJson(path);
+  const config = await readConfigObject(path);
   const workflows = (config["workflows"] ?? {}) as Record<string, unknown>;
+  const existed = Boolean(workflows[name]);
 
-  if (workflows[name] && !force) {
-    throw new Error(
-      `Workflow "${name}" already exists. Pass force=true to overwrite.`
-    );
+  if (existed && !force) {
+    throw new Error(`Workflow "${name}" already exists. Pass force=true to overwrite.`);
   }
 
   const entry = {
@@ -65,11 +49,10 @@ export async function createWorkflow(
     commanderMayAlsoUse,
   };
 
-  config["workflows"] = { ...workflows, [name]: entry };
-  await writeJson(path, config);
+  await setConfigValue(path, ["workflows", name], entry);
 
   return [
-    `Workflow "${name}" ${workflows[name] ? "updated" : "created"} in openflow.json.`,
+    `Workflow "${name}" ${existed ? "updated" : "created"} in openflow.json.`,
     ``,
     `  sequence:            ${sequence.join(" → ")}`,
     `  commanderMayAlsoUse: [${commanderMayAlsoUse.join(", ")}]`,
@@ -89,22 +72,15 @@ async function setWorkflowDisabled(
   if (!name.trim()) throw new Error("Workflow name must not be empty");
 
   const path = resolve(directory, "openflow.json");
-  const config = await readJson(path);
+  const config = await readConfigObject(path);
   const workflows = (config["workflows"] ?? {}) as Record<string, unknown>;
 
   if (!workflows[name]) {
     throw new Error(`Workflow "${name}" not found in openflow.json`);
   }
 
-  const entry = workflows[name] as Record<string, unknown>;
-  if (disabled) {
-    entry["disabled"] = true;
-  } else {
-    delete entry["disabled"];
-  }
-
-  config["workflows"] = { ...workflows, [name]: entry };
-  await writeJson(path, config);
+  // `undefined` deletes the key (re-enabling); `true` disables.
+  await setConfigValue(path, ["workflows", name, "disabled"], disabled ? true : undefined);
 
   const state = disabled ? "disabled" : "enabled";
   return `Workflow "${name}" is now ${state}.`;
@@ -149,14 +125,15 @@ export async function createAgent(
   if (!name.trim()) throw new Error("Agent name must not be empty");
   if (!prompt.trim()) throw new Error("Agent prompt must not be empty");
 
-  const path = resolve(directory, "opencode.json");
-  const config = await readJson(path);
+  // Resolve opencode.jsonc / opencode.json (prefer .jsonc) and write back to
+  // the same file, preserving comments — see #35, #36.
+  const { read, write } = await resolveConfigPath(directory);
+  const config = await readConfigObject(read);
   const agents = (config["agent"] ?? {}) as Record<string, unknown>;
+  const existed = Boolean(agents[name]);
 
-  if (agents[name] && !force) {
-    throw new Error(
-      `Agent "${name}" already exists. Pass force=true to overwrite.`
-    );
+  if (existed && !force) {
+    throw new Error(`Agent "${name}" already exists. Pass force=true to overwrite.`);
   }
 
   const entry: Record<string, unknown> = {
@@ -171,11 +148,10 @@ export async function createAgent(
     ...(model ? { model } : {}),
   };
 
-  config["agent"] = { ...agents, [name]: entry };
-  await writeJson(path, config);
+  await setConfigValue(write, ["agent", name], entry);
 
   return [
-    `Agent "${name}" ${agents[name] ? "updated" : "created"} in opencode.json.`,
+    `Agent "${name}" ${existed ? "updated" : "created"} in ${write.split("/").pop()}.`,
     ``,
     `  mode:      ${mode}`,
     `  edit:      ${allowEdit ? "allow" : "deny"}`,

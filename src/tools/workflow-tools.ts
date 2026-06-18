@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parse, type ParseError } from "jsonc-parser";
 import type { Workflow, SequenceStep } from "../config/workflow-loader.js";
 
 export type WorkflowInfo = Workflow & { name: string };
@@ -12,12 +13,15 @@ async function readOpenflowJson(directory: string): Promise<Record<string, unkno
   } catch {
     return {};
   }
-  try {
-    const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-  } catch {
+  if (!raw.trim()) return {};
+  const errors: ParseError[] = [];
+  const parsed = parse(raw, errors, { allowTrailingComma: true });
+  if (errors.length > 0) {
     throw new Error("openflow.json is not valid JSON");
   }
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : {};
 }
 
 function parseSequenceStep(item: unknown): SequenceStep {

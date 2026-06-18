@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parse } from "jsonc-parser";
 async function readOpenflowJson(directory) {
     const path = resolve(directory, "openflow.json");
     let raw;
@@ -9,13 +10,16 @@ async function readOpenflowJson(directory) {
     catch {
         return {};
     }
-    try {
-        const parsed = JSON.parse(raw);
-        return typeof parsed === "object" && parsed !== null ? parsed : {};
-    }
-    catch {
+    if (!raw.trim())
+        return {};
+    const errors = [];
+    const parsed = parse(raw, errors, { allowTrailingComma: true });
+    if (errors.length > 0) {
         throw new Error("openflow.json is not valid JSON");
     }
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+        ? parsed
+        : {};
 }
 function parseSequenceStep(item) {
     if (typeof item === "string")
