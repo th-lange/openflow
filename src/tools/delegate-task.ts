@@ -29,12 +29,15 @@ const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  *
  * Takes an already-connected OpencodeClient (injected by the plugin host — see
  * ADR 0001 / #39) rather than constructing one from a URL. An optional
- * AbortSignal lets the OpenCode tool runtime cancel the delegation.
+ * AbortSignal lets the OpenCode tool runtime cancel the delegation. The
+ * per-agent timeout is configurable via the `settings` block in openflow.json
+ * (#45); it defaults to TIMEOUT_MS when not supplied.
  */
 export async function delegateTask(
   input: DelegateTaskInput,
   client: OpencodeClient,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  timeoutMs: number = TIMEOUT_MS
 ): Promise<DelegateTaskOutput> {
   const { agent, prompt, context, sessionId } = DelegateTaskInputSchema.parse(input);
 
@@ -59,7 +62,10 @@ export async function delegateTask(
   }
 
   // Send prompt, racing against a timeout and an optional external abort (#12).
+  // The losing racers (timeout timer, abort listener) are torn down once the
+  // race settles so they don't keep the event loop alive (#45).
   let result: string;
+  const cleanups: Array<() => void> = [];
   try {
     const promptPromise = client.session.prompt({
       path: { id: childSessionId },
@@ -69,11 +75,13 @@ export async function delegateTask(
       },
     });
 
-    const promptResult = await Promise.race([
+    const racers: Array<Promise<Awaited<typeof promptPromise>>> = [
       promptPromise,
-      rejectAfter(TIMEOUT_MS, `Agent "${agent}" timed out after ${TIMEOUT_MS / 1000}s`),
-      ...(signal ? [rejectOnAbort(signal, `Agent "${agent}" was cancelled`)] : []),
-    ]);
+      rejectAfter(timeoutMs, `Agent "${agent}" timed out after ${timeoutMs / 1000}s`, cleanups),
+    ];
+    if (signal) racers.push(rejectOnAbort(signal, `Agent "${agent}" was cancelled`, cleanups));
+
+    const promptResult = await Promise.race(racers);
 
     if (promptResult.error) {
       throw new Error(`Prompt failed: ${JSON.stringify(promptResult.error)}`);
@@ -88,6 +96,8 @@ export async function delegateTask(
     // Always clean up the child session on error (#12: no session leaks)
     await client.session.delete({ path: { id: childSessionId } }).catch(() => {});
     throw wrapError(e, `Agent "${agent}" failed`);
+  } finally {
+    for (const fn of cleanups) fn();
   }
 
   // Record step in state store if we have a parent session (#14)
@@ -107,14 +117,23 @@ export async function delegateTask(
   return { result, childSessionId, stepIndex };
 }
 
-function rejectAfter(ms: number, message: string): Promise<never> {
-  return new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms));
+function rejectAfter(ms: number, message: string, cleanups: Array<() => void>): Promise<never> {
+  return new Promise<never>((_, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    cleanups.push(() => clearTimeout(timer));
+  });
 }
 
-function rejectOnAbort(signal: AbortSignal, message: string): Promise<never> {
+function rejectOnAbort(
+  signal: AbortSignal,
+  message: string,
+  cleanups: Array<() => void>
+): Promise<never> {
   return new Promise<never>((_, reject) => {
     if (signal.aborted) return reject(new Error(message));
-    signal.addEventListener("abort", () => reject(new Error(message)), { once: true });
+    const onAbort = () => reject(new Error(message));
+    signal.addEventListener("abort", onAbort, { once: true });
+    cleanups.push(() => signal.removeEventListener("abort", onAbort));
   });
 }
 

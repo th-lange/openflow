@@ -1,13 +1,14 @@
 import { delegateTask } from "./delegate-task.js";
-const MAX_CONCURRENT = 5;
-export async function parallelDispatch(tasks, client, signal) {
+const DEFAULT_MAX_CONCURRENT = 5;
+export async function parallelDispatch(tasks, client, signal, options) {
+    const maxConcurrent = options?.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
     const results = new Array(tasks.length);
-    for (let start = 0; start < tasks.length; start += MAX_CONCURRENT) {
-        const batch = tasks.slice(start, start + MAX_CONCURRENT);
+    for (let start = 0; start < tasks.length; start += maxConcurrent) {
+        const batch = tasks.slice(start, start + maxConcurrent);
         const batchResults = await Promise.all(batch.map(async (task, batchIdx) => {
             const index = start + batchIdx;
             try {
-                const { result } = await delegateTask(task, client, signal);
+                const { result } = await delegateTask(task, client, signal, options?.timeoutMs);
                 return { index, agent: task.agent, output: result };
             }
             catch (e) {

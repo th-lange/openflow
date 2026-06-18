@@ -6,7 +6,8 @@ import { runConditional } from "./run-conditional.js";
 import { runFanout } from "./run-fanout.js";
 import { runParallel } from "./run-parallel.js";
 import { runDebate } from "./run-debate.js";
-import type { SequentialWorkflow } from "../config/workflow-loader.js";
+import { resolveSettings } from "../config/workflow-loader.js";
+import type { SequentialWorkflow, EngineSettings } from "../config/workflow-loader.js";
 
 type StepResult = { label: string; output: string };
 
@@ -26,6 +27,7 @@ export async function runSequential(
   client: OpencodeClient,
   workDir: string,
   dispatch: typeof runWorkflow,
+  settings: EngineSettings,
   signal?: AbortSignal
 ): Promise<string> {
   const { sequence } = workflow;
@@ -36,9 +38,9 @@ export async function runSequential(
     let output: string;
 
     if (typeof step === "string") {
-      ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, client, signal));
+      ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, client, signal, settings.agentTimeoutMs));
     } else if ("workflow" in step) {
-      output = await dispatch(step.workflow, prompt, context, sessionId, client, workDir, signal);
+      output = await dispatch(step.workflow, prompt, context, sessionId, client, workDir, signal, settings);
     } else {
       // checkpoint — top-level commander handles these; if we get here it means
       // something bypassed the load-time checkpoint-reference constraint
@@ -78,23 +80,26 @@ export async function runWorkflow(
   sessionId: string | undefined,
   client: OpencodeClient,
   workDir: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  settings?: EngineSettings
 ): Promise<string> {
   const workflow = await getWorkflow(name, workDir);
+  // Resolve engine settings once at the top level; nested dispatches reuse them (#45).
+  const resolved = settings ?? (await resolveSettings(workDir));
 
   switch (workflow.pattern) {
     case "sequential":
-      return runSequential(workflow, prompt, context, sessionId, client, workDir, runWorkflow, signal);
+      return runSequential(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, signal);
     case "evaluator-optimizer":
-      return runEvaluatorOptimizer(workflow, prompt, context, sessionId, client, signal);
+      return runEvaluatorOptimizer(workflow, prompt, context, sessionId, client, resolved, signal);
     case "conditional":
-      return runConditional(workflow, prompt, context, sessionId, client, workDir, runWorkflow, signal);
+      return runConditional(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, signal);
     case "fanout":
-      return runFanout(workflow, prompt, context, sessionId, client, signal);
+      return runFanout(workflow, prompt, context, sessionId, client, resolved, signal);
     case "parallel":
-      return runParallel(workflow, prompt, context, sessionId, client, signal);
+      return runParallel(workflow, prompt, context, sessionId, client, resolved, signal);
     case "debate":
-      return runDebate(workflow, prompt, context, sessionId, client, signal);
+      return runDebate(workflow, prompt, context, sessionId, client, resolved, signal);
     case "orchestrator":
       throw new Error(
         `Workflow "${name}" uses pattern "orchestrator" which is prompt-driven. ` +

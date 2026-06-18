@@ -2,6 +2,70 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parse } from "jsonc-parser";
 import { assertAgentExists } from "./agent-registry.js";
+export const DEFAULT_SETTINGS = {
+    agentTimeoutMs: 5 * 60 * 1000, // 5 minutes
+    maxConcurrent: 5,
+};
+function isPositiveNumber(value) {
+    return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+/**
+ * Merge an optional `settings` block (as read from openflow.json) with
+ * environment-variable overrides and the built-in defaults. Environment
+ * variables take precedence over the file so operators can tune a running
+ * install without editing config. Throws on malformed values so a bad setting
+ * is caught at startup rather than silently ignored.
+ */
+export function mergeSettings(raw) {
+    let { agentTimeoutMs, maxConcurrent } = DEFAULT_SETTINGS;
+    if (raw !== undefined) {
+        if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+            throw new Error('openflow.json "settings" must be an object');
+        }
+        const s = raw;
+        if (s["agentTimeoutMs"] !== undefined) {
+            if (!isPositiveNumber(s["agentTimeoutMs"])) {
+                throw new Error('"settings.agentTimeoutMs" must be a positive number (milliseconds)');
+            }
+            agentTimeoutMs = s["agentTimeoutMs"];
+        }
+        if (s["maxConcurrent"] !== undefined) {
+            if (!isPositiveNumber(s["maxConcurrent"]) || !Number.isInteger(s["maxConcurrent"])) {
+                throw new Error('"settings.maxConcurrent" must be a positive integer');
+            }
+            maxConcurrent = s["maxConcurrent"];
+        }
+    }
+    const envTimeout = process.env["OPENFLOW_AGENT_TIMEOUT_MS"];
+    if (envTimeout) {
+        const n = Number(envTimeout);
+        if (!isPositiveNumber(n)) {
+            throw new Error("OPENFLOW_AGENT_TIMEOUT_MS must be a positive number");
+        }
+        agentTimeoutMs = n;
+    }
+    const envConcurrent = process.env["OPENFLOW_MAX_CONCURRENT"];
+    if (envConcurrent) {
+        const n = Number(envConcurrent);
+        if (!isPositiveNumber(n) || !Number.isInteger(n)) {
+            throw new Error("OPENFLOW_MAX_CONCURRENT must be a positive integer");
+        }
+        maxConcurrent = n;
+    }
+    return { agentTimeoutMs, maxConcurrent };
+}
+/**
+ * Resolve engine settings from `openflow.json` in `directory`, merged with
+ * environment overrides and defaults. Missing file or missing `settings` block
+ * yields the defaults.
+ */
+export async function resolveSettings(directory = process.cwd()) {
+    const parsed = await readOpenflowFile(directory);
+    const raw = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed["settings"]
+        : undefined;
+    return mergeSettings(raw);
+}
 // ── File read (single source — JSONC-tolerant) ──────────────────────────────────
 /**
  * Read and parse `openflow.json` (JSON or JSONC) from `directory`.
@@ -38,6 +102,7 @@ export async function loadWorkflows(client, directory = process.cwd()) {
         throw new Error("openflow.json must be a JSON object");
     }
     const obj = parsed;
+    mergeSettings(obj["settings"]); // validate the settings block at startup (#45)
     const rawWorkflows = obj["workflows"];
     if (!rawWorkflows || typeof rawWorkflows !== "object")
         return {};

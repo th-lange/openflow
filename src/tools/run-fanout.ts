@@ -2,7 +2,7 @@ import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import { parallelDispatch } from "./parallel-dispatch.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
-import type { FanoutWorkflow } from "../config/workflow-loader.js";
+import type { FanoutWorkflow, EngineSettings } from "../config/workflow-loader.js";
 
 export async function runFanout(
   workflow: FanoutWorkflow,
@@ -10,12 +10,16 @@ export async function runFanout(
   context: string | undefined,
   sessionId: string | undefined,
   client: OpencodeClient,
+  settings: EngineSettings,
   signal?: AbortSignal
 ): Promise<string> {
   const { agents, picker, pickerPrompt } = workflow;
 
   const tasks = agents.map((agent) => ({ agent, prompt, context, sessionId }));
-  const results = await parallelDispatch(tasks, client, signal);
+  const results = await parallelDispatch(tasks, client, signal, {
+    maxConcurrent: settings.maxConcurrent,
+    timeoutMs: settings.agentTimeoutMs,
+  });
 
   const successful = results.filter((r) => !r.error);
   const failed = results.filter((r) => r.error);
@@ -48,7 +52,8 @@ export async function runFanout(
   const { result: pickerOutput } = await delegateTask(
     { agent: picker, prompt: pickerInstruction, context: candidatesContext, sessionId },
     client,
-    signal
+    signal,
+    settings.agentTimeoutMs
   );
 
   const block = parseOpenflowBlock(pickerOutput);

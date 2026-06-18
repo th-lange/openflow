@@ -4,7 +4,7 @@ import { delegateTask } from "./tools/delegate-task.js";
 import { getWorkflow, listWorkflows, summariseWorkflow, isValidWorkflow, } from "./tools/workflow-tools.js";
 import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "./tools/management-tools.js";
 import { runWorkflow } from "./tools/run-workflow.js";
-import { loadWorkflows } from "./config/workflow-loader.js";
+import { loadWorkflows, resolveSettings } from "./config/workflow-loader.js";
 import { createWorkflowArgs, createAgentArgs } from "./tools/schemas.js";
 // Native OpenCode plugin entrypoint (ADR 0001 / #39).
 //
@@ -69,7 +69,8 @@ export const openflow = async ({ client, directory }) => {
                     context: z.string().optional().describe("Prior step outputs to prepend as context"),
                 },
                 async execute({ agent, prompt, context }, ctx) {
-                    const { result } = await delegateTask({ agent, prompt, context, sessionId: ctx.sessionID }, client, ctx.abort);
+                    const settings = await resolveSettings(ctx.directory);
+                    const { result } = await delegateTask({ agent, prompt, context, sessionId: ctx.sessionID }, client, ctx.abort, settings.agentTimeoutMs);
                     return result;
                 },
             }),

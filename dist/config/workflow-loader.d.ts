@@ -68,6 +68,27 @@ export type DebateWorkflow = {
 };
 export type Workflow = SequentialWorkflow | OrchestratorWorkflow | EvaluatorOptimizerWorkflow | ConditionalWorkflow | FanoutWorkflow | ParallelWorkflow | DebateWorkflow;
 export type WorkflowRegistry = Record<string, Workflow>;
+export type EngineSettings = {
+    /** Per-agent delegation timeout in milliseconds. */
+    agentTimeoutMs: number;
+    /** Maximum number of agents dispatched concurrently (fan-out/parallel). */
+    maxConcurrent: number;
+};
+export declare const DEFAULT_SETTINGS: EngineSettings;
+/**
+ * Merge an optional `settings` block (as read from openflow.json) with
+ * environment-variable overrides and the built-in defaults. Environment
+ * variables take precedence over the file so operators can tune a running
+ * install without editing config. Throws on malformed values so a bad setting
+ * is caught at startup rather than silently ignored.
+ */
+export declare function mergeSettings(raw: unknown): EngineSettings;
+/**
+ * Resolve engine settings from `openflow.json` in `directory`, merged with
+ * environment overrides and defaults. Missing file or missing `settings` block
+ * yields the defaults.
+ */
+export declare function resolveSettings(directory?: string): Promise<EngineSettings>;
 /**
  * Read and parse `openflow.json` (JSON or JSONC) from `directory`.
  * Returns the parsed top-level value, or `undefined` when the file is absent.

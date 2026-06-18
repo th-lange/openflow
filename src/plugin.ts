@@ -10,7 +10,7 @@ import {
 } from "./tools/workflow-tools.js";
 import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "./tools/management-tools.js";
 import { runWorkflow } from "./tools/run-workflow.js";
-import { loadWorkflows } from "./config/workflow-loader.js";
+import { loadWorkflows, resolveSettings } from "./config/workflow-loader.js";
 import { createWorkflowArgs, createAgentArgs } from "./tools/schemas.js";
 
 // Native OpenCode plugin entrypoint (ADR 0001 / #39).
@@ -83,10 +83,12 @@ export const openflow: Plugin = async ({ client, directory }: PluginInput): Prom
           context: z.string().optional().describe("Prior step outputs to prepend as context"),
         },
         async execute({ agent, prompt, context }, ctx) {
+          const settings = await resolveSettings(ctx.directory);
           const { result } = await delegateTask(
             { agent, prompt, context, sessionId: ctx.sessionID },
             client,
-            ctx.abort
+            ctx.abort,
+            settings.agentTimeoutMs
           );
           return result;
         },

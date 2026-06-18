@@ -5,6 +5,7 @@ import { runConditional } from "./run-conditional.js";
 import { runFanout } from "./run-fanout.js";
 import { runParallel } from "./run-parallel.js";
 import { runDebate } from "./run-debate.js";
+import { resolveSettings } from "../config/workflow-loader.js";
 function stepLabel(step) {
     if (typeof step === "string")
         return step;
@@ -13,17 +14,17 @@ function stepLabel(step) {
     return "[checkpoint]";
 }
 // ── Sequential ────────────────────────────────────────────────────────────────
-export async function runSequential(workflow, prompt, initialContext, sessionId, client, workDir, dispatch, signal) {
+export async function runSequential(workflow, prompt, initialContext, sessionId, client, workDir, dispatch, settings, signal) {
     const { sequence } = workflow;
     const stepResults = [];
     let context = initialContext ?? "";
     for (const step of sequence) {
         let output;
         if (typeof step === "string") {
-            ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, client, signal));
+            ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, client, signal, settings.agentTimeoutMs));
         }
         else if ("workflow" in step) {
-            output = await dispatch(step.workflow, prompt, context, sessionId, client, workDir, signal);
+            output = await dispatch(step.workflow, prompt, context, sessionId, client, workDir, signal, settings);
         }
         else {
             // checkpoint — top-level commander handles these; if we get here it means
@@ -51,21 +52,23 @@ export async function runSequential(workflow, prompt, initialContext, sessionId,
     ].join("\n");
 }
 // ── Dispatcher ────────────────────────────────────────────────────────────────
-export async function runWorkflow(name, prompt, context, sessionId, client, workDir, signal) {
+export async function runWorkflow(name, prompt, context, sessionId, client, workDir, signal, settings) {
     const workflow = await getWorkflow(name, workDir);
+    // Resolve engine settings once at the top level; nested dispatches reuse them (#45).
+    const resolved = settings ?? (await resolveSettings(workDir));
     switch (workflow.pattern) {
         case "sequential":
-            return runSequential(workflow, prompt, context, sessionId, client, workDir, runWorkflow, signal);
+            return runSequential(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, signal);
         case "evaluator-optimizer":
-            return runEvaluatorOptimizer(workflow, prompt, context, sessionId, client, signal);
+            return runEvaluatorOptimizer(workflow, prompt, context, sessionId, client, resolved, signal);
         case "conditional":
-            return runConditional(workflow, prompt, context, sessionId, client, workDir, runWorkflow, signal);
+            return runConditional(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, signal);
         case "fanout":
-            return runFanout(workflow, prompt, context, sessionId, client, signal);
+            return runFanout(workflow, prompt, context, sessionId, client, resolved, signal);
         case "parallel":
-            return runParallel(workflow, prompt, context, sessionId, client, signal);
+            return runParallel(workflow, prompt, context, sessionId, client, resolved, signal);
         case "debate":
-            return runDebate(workflow, prompt, context, sessionId, client, signal);
+            return runDebate(workflow, prompt, context, sessionId, client, resolved, signal);
         case "orchestrator":
             throw new Error(`Workflow "${name}" uses pattern "orchestrator" which is prompt-driven. ` +
                 `Handle it via delegate_task loops per your system instructions.`);

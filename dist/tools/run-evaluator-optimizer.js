@@ -1,6 +1,6 @@
 import { delegateTask } from "./delegate-task.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
-export async function runEvaluatorOptimizer(workflow, prompt, initialContext, sessionId, client, signal) {
+export async function runEvaluatorOptimizer(workflow, prompt, initialContext, sessionId, client, settings, signal) {
     const { producer, evaluator, maxIterations, passCriteria } = workflow;
     let lastProducerOutput = "";
     let feedback = "";
@@ -12,7 +12,7 @@ export async function runEvaluatorOptimizer(workflow, prompt, initialContext, se
         ]
             .filter(Boolean)
             .join("\n\n");
-        const { result: producerOutput } = await delegateTask({ agent: producer, prompt, context: producerContext || undefined, sessionId }, client, signal);
+        const { result: producerOutput } = await delegateTask({ agent: producer, prompt, context: producerContext || undefined, sessionId }, client, signal, settings.agentTimeoutMs);
         lastProducerOutput = producerOutput;
         // Instruct the evaluator to emit an openflow verdict block so we can parse the result
         const evaluatorPrompt = [
@@ -33,7 +33,7 @@ export async function runEvaluatorOptimizer(workflow, prompt, initialContext, se
             prompt: evaluatorPrompt,
             context: `## Producer output (iteration ${i})\n\n${producerOutput}`,
             sessionId,
-        }, client, signal);
+        }, client, signal, settings.agentTimeoutMs);
         // Missing or malformed block → treat as FAIL and continue (per #31 contract)
         const block = parseOpenflowBlock(evaluatorOutput);
         const verdict = typeof block?.verdict === "string" ? block.verdict : null;

@@ -1,10 +1,13 @@
 import { delegateTask } from "./delegate-task.js";
 import { parallelDispatch } from "./parallel-dispatch.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
-export async function runFanout(workflow, prompt, context, sessionId, client, signal) {
+export async function runFanout(workflow, prompt, context, sessionId, client, settings, signal) {
     const { agents, picker, pickerPrompt } = workflow;
     const tasks = agents.map((agent) => ({ agent, prompt, context, sessionId }));
-    const results = await parallelDispatch(tasks, client, signal);
+    const results = await parallelDispatch(tasks, client, signal, {
+        maxConcurrent: settings.maxConcurrent,
+        timeoutMs: settings.agentTimeoutMs,
+    });
     const successful = results.filter((r) => !r.error);
     const failed = results.filter((r) => r.error);
     if (successful.length === 0) {
@@ -25,7 +28,7 @@ export async function runFanout(workflow, prompt, context, sessionId, client, si
         "```",
         "(choice is 1-indexed)",
     ].join("\n");
-    const { result: pickerOutput } = await delegateTask({ agent: picker, prompt: pickerInstruction, context: candidatesContext, sessionId }, client, signal);
+    const { result: pickerOutput } = await delegateTask({ agent: picker, prompt: pickerInstruction, context: candidatesContext, sessionId }, client, signal, settings.agentTimeoutMs);
     const block = parseOpenflowBlock(pickerOutput);
     const choiceRaw = block?.choice;
     const choice = typeof choiceRaw === "number"
