@@ -9,22 +9,31 @@ export type DispatchResult = {
   error?: string;
 };
 
-const MAX_CONCURRENT = 5;
+const DEFAULT_MAX_CONCURRENT = 5;
+
+export type DispatchOptions = {
+  /** Maximum agents in flight at once (default: 5). */
+  maxConcurrent?: number;
+  /** Per-agent timeout in milliseconds, forwarded to delegateTask. */
+  timeoutMs?: number;
+};
 
 export async function parallelDispatch(
   tasks: DelegateTaskInput[],
   client: OpencodeClient,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: DispatchOptions
 ): Promise<DispatchResult[]> {
+  const maxConcurrent = options?.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
   const results: DispatchResult[] = new Array(tasks.length);
 
-  for (let start = 0; start < tasks.length; start += MAX_CONCURRENT) {
-    const batch = tasks.slice(start, start + MAX_CONCURRENT);
+  for (let start = 0; start < tasks.length; start += maxConcurrent) {
+    const batch = tasks.slice(start, start + maxConcurrent);
     const batchResults = await Promise.all(
       batch.map(async (task, batchIdx) => {
         const index = start + batchIdx;
         try {
-          const { result } = await delegateTask(task, client, signal);
+          const { result } = await delegateTask(task, client, signal, options?.timeoutMs);
           return { index, agent: task.agent, output: result };
         } catch (e) {
           return {

@@ -17,7 +17,9 @@ export type DelegateTaskOutput = {
  *
  * Takes an already-connected OpencodeClient (injected by the plugin host — see
  * ADR 0001 / #39) rather than constructing one from a URL. An optional
- * AbortSignal lets the OpenCode tool runtime cancel the delegation.
+ * AbortSignal lets the OpenCode tool runtime cancel the delegation. The
+ * per-agent timeout is configurable via the `settings` block in openflow.json
+ * (#45); it defaults to TIMEOUT_MS when not supplied.
  */
-export declare function delegateTask(input: DelegateTaskInput, client: OpencodeClient, signal?: AbortSignal): Promise<DelegateTaskOutput>;
+export declare function delegateTask(input: DelegateTaskInput, client: OpencodeClient, signal?: AbortSignal, timeoutMs?: number): Promise<DelegateTaskOutput>;
 //# sourceMappingURL=delegate-task.d.ts.map

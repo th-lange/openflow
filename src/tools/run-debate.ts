@@ -1,7 +1,7 @@
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
-import type { DebateWorkflow } from "../config/workflow-loader.js";
+import type { DebateWorkflow, EngineSettings } from "../config/workflow-loader.js";
 
 type Turn = { role: string; content: string };
 
@@ -15,6 +15,7 @@ export async function runDebate(
   context: string | undefined,
   sessionId: string | undefined,
   client: OpencodeClient,
+  settings: EngineSettings,
   signal?: AbortSignal
 ): Promise<string> {
   const { proposer, critic, rounds, judge } = workflow;
@@ -29,7 +30,8 @@ export async function runDebate(
       sessionId,
     },
     client,
-    signal
+    signal,
+    settings.agentTimeoutMs
   );
   turns.push({ role: "proposer", content: initial });
 
@@ -43,7 +45,8 @@ export async function runDebate(
         sessionId,
       },
       client,
-      signal
+      signal,
+      settings.agentTimeoutMs
     );
     turns.push({ role: `critic (round ${round})`, content: criticOutput });
 
@@ -56,7 +59,8 @@ export async function runDebate(
           sessionId,
         },
         client,
-        signal
+        signal,
+        settings.agentTimeoutMs
       );
       turns.push({ role: `proposer (round ${round})`, content: proposerResponse });
     }
@@ -71,7 +75,8 @@ export async function runDebate(
       sessionId,
     },
     client,
-    signal
+    signal,
+    settings.agentTimeoutMs
   );
   turns.push({ role: "proposer (rebuttal)", content: rebuttal });
 
@@ -90,7 +95,8 @@ export async function runDebate(
   const { result: judgeOutput } = await delegateTask(
     { agent: judge, prompt: judgePrompt, context: transcript(turns), sessionId },
     client,
-    signal
+    signal,
+    settings.agentTimeoutMs
   );
 
   const block = parseOpenflowBlock(judgeOutput);

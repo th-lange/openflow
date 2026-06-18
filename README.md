@@ -177,6 +177,27 @@ All workflows live under a `"workflows"` key, each keyed by name:
 
 The `pattern` field selects the coordination strategy. Omitting it defaults to `"sequential"`.
 
+### Engine settings
+
+An optional top-level `"settings"` block tunes the execution engine. Both fields are optional; omitted values fall back to the defaults below.
+
+```json
+{
+  "settings": {
+    "agentTimeoutMs": 300000,
+    "maxConcurrent": 5
+  },
+  "workflows": { ... }
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `agentTimeoutMs` | `300000` (5 min) | Per-agent delegation timeout in milliseconds. A delegation that exceeds it is aborted and reported as a failure. |
+| `maxConcurrent` | `5` | Maximum number of agents dispatched at once in `fanout` / `parallel` workflows. |
+
+Environment variables override the file (useful for per-machine tuning without editing config): `OPENFLOW_AGENT_TIMEOUT_MS` and `OPENFLOW_MAX_CONCURRENT`. Invalid values (non-positive timeout, non-integer concurrency) are rejected at startup.
+
 ### Workflow patterns
 
 | Pattern | Description |
