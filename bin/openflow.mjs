@@ -2,7 +2,7 @@
 import { readFile, writeFile, access, mkdir } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse, modify, applyEdits } from "jsonc-parser";
 
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -62,18 +62,21 @@ async function install(targetDir) {
   const edits = []; // [{ path, value }]
   let changed = false;
 
-  // ── MCP server ──────────────────────────────────────────────────────────────
-  if (!config.mcp?.openflow) {
-    const distMcp = resolve(PKG_ROOT, "dist", "mcp.js");
-    const useBuilt = await fileExists(distMcp);
-    const mcpCommand = useBuilt
-      ? ["node", distMcp]
-      : ["node", "--import", "tsx/esm", resolve(PKG_ROOT, "src", "mcp.ts")];
-    edits.push({ path: ["mcp", "openflow"], value: { type: "local", command: mcpCommand } });
+  // ── plugin ────────────────────────────────────────────────────────────────
+  // Register openflow as a native OpenCode plugin (ADR 0001 / #39). Point at the
+  // built dist/plugin.js when present, else the TS source (OpenCode runs on Bun
+  // and imports .ts directly). Use an absolute file:// URL so it resolves
+  // regardless of the target project's location.
+  const distPlugin = resolve(PKG_ROOT, "dist", "plugin.js");
+  const pluginFile = (await fileExists(distPlugin)) ? distPlugin : resolve(PKG_ROOT, "src", "plugin.ts");
+  const pluginEntry = pathToFileURL(pluginFile).href;
+  const existingPlugins = Array.isArray(config.plugin) ? config.plugin : [];
+  if (!existingPlugins.includes(pluginEntry)) {
+    edits.push({ path: ["plugin"], value: [...existingPlugins, pluginEntry] });
     changed = true;
-    console.log("  ✓ MCP server configured");
+    console.log("  ✓ openflow plugin registered");
   } else {
-    console.log("  · MCP server already configured — skipping");
+    console.log("  · openflow plugin already registered — skipping");
   }
 
   // ── /workflow slash command ──────────────────────────────────────────────────
