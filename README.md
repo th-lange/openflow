@@ -74,7 +74,7 @@ See [Configuration](#3-configuration) for all patterns and [Options](#4-options)
 opencode
 ```
 
-OpenCode loads the openflow plugin on startup and validates `openflow.json` (unknown agents, dangling workflow references, and cycles are reported in the OpenCode logs). Eight tools become available: `run_workflow`, `delegate_task`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
+OpenCode loads the openflow plugin on startup and validates `openflow.json` (unknown agents, dangling workflow references, and cycles are reported in the OpenCode logs). Nine tools become available: `run_workflow`, `delegate_task`, `get_workflow`, `list_workflows`, `list_agents`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
 
 The commander runs code-driven patterns via `run_workflow` — fan-out and parallel branches execute concurrently, and iteration/round limits are enforced in code, not left to the model.
 
@@ -116,6 +116,14 @@ with the description "Fast path for urgent fixes".
 
 The commander calls `create_workflow`, which supports every pattern (not just sequential). The new entry is validated — shape, referenced agents, workflow references, and cycles — before it is written to `openflow.json`, and rolled back if invalid. Available immediately — no restart needed.
 
+### Build a workflow interactively
+
+```
+/build-workflow
+```
+
+`/build-workflow` activates the **`workflow-builder`** agent, which interviews you element by element — name, then each step in turn (an agent task, a `{ checkpoint }` pause, or a nested `{ workflow }`) — and writes the result to `openflow.json` once you confirm. It builds **sequential, commander-supervised** workflows and validates every agent/workflow reference as it goes (via `list_agents` / `list_workflows`). Run `/build-workflow` again and choose *modify* to edit an existing sequential workflow's steps. For the other six patterns, ask the commander to use `create_workflow` directly.
+
 ### Create an agent
 
 ```
@@ -150,6 +158,21 @@ You can also set the flag directly in `openflow.json`:
     "draft-workflow": {
       "disabled": true,
       "sequence": ["composer", "coder"]
+    }
+  }
+}
+```
+
+### Lock a workflow
+
+Set `"locked": true` on a workflow to make it immutable. Locked workflows cannot be overwritten (even with `force`), enabled, or disabled by the management tools — useful for protecting a curated or shared workflow from accidental edits. Locked entries are marked `[locked]` in `list_workflows`. The interactive builder refuses to modify them.
+
+```json
+{
+  "workflows": {
+    "release": {
+      "locked": true,
+      "sequence": ["composer", "coder", "analyzer"]
     }
   }
 }

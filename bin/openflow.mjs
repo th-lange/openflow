@@ -97,6 +97,23 @@ async function install(targetDir) {
     console.log("  · /workflow command already configured — skipping");
   }
 
+  // ── /build-workflow slash command ────────────────────────────────────────────
+  // Routes to the workflow-builder primary agent for interactive authoring.
+  if (!config.command?.["build-workflow"]) {
+    edits.push({
+      path: ["command", "build-workflow"],
+      value: {
+        description: "Interactively create or modify a workflow",
+        agent: "workflow-builder",
+        template: "$ARGUMENTS",
+      },
+    });
+    changed = true;
+    console.log("  ✓ /build-workflow command registered");
+  } else {
+    console.log("  · /build-workflow command already configured — skipping");
+  }
+
   // ── agents ───────────────────────────────────────────────────────────────────
   const srcAgents = parseConfig(await readText(resolve(PKG_ROOT, "opencode.json"))).agent ?? {};
   const existingAgents = config.agent ?? {};

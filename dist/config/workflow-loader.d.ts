@@ -8,6 +8,7 @@ export type SequentialWorkflow = {
     pattern: "sequential";
     description?: string;
     disabled?: boolean;
+    locked?: boolean;
     sequence: SequenceStep[];
     commanderMayAlsoUse: string[];
 };
@@ -15,6 +16,7 @@ export type OrchestratorWorkflow = {
     pattern: "orchestrator";
     description?: string;
     disabled?: boolean;
+    locked?: boolean;
     agents: string[];
     maxIterations: number;
     satisfactionCriteria: string;
@@ -23,6 +25,7 @@ export type EvaluatorOptimizerWorkflow = {
     pattern: "evaluator-optimizer";
     description?: string;
     disabled?: boolean;
+    locked?: boolean;
     producer: string;
     evaluator: string;
     maxIterations: number;
@@ -32,6 +35,7 @@ export type ConditionalWorkflow = {
     pattern: "conditional";
     description?: string;
     disabled?: boolean;
+    locked?: boolean;
     router: string;
     routes: Array<{
         condition: string;
@@ -43,6 +47,7 @@ export type FanoutWorkflow = {
     pattern: "fanout";
     description?: string;
     disabled?: boolean;
+    locked?: boolean;
     agents: string[];
     picker: string;
     pickerPrompt?: string;
@@ -51,6 +56,7 @@ export type ParallelWorkflow = {
     pattern: "parallel";
     description?: string;
     disabled?: boolean;
+    locked?: boolean;
     subtasks: Array<{
         agent: string;
         prompt: string;
@@ -61,6 +67,7 @@ export type DebateWorkflow = {
     pattern: "debate";
     description?: string;
     disabled?: boolean;
+    locked?: boolean;
     proposer: string;
     critic: string;
     rounds: number;

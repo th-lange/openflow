@@ -249,6 +249,7 @@ export function parseWorkflowEntry(name, raw) {
     const w = raw;
     const pattern = w["pattern"] ?? "sequential";
     const disabled = w["disabled"] === true ? true : undefined;
+    const locked = w["locked"] === true ? true : undefined;
     let result;
     if (pattern === "sequential")
         result = validateSequentialWorkflow(name, w);
@@ -266,8 +267,9 @@ export function parseWorkflowEntry(name, raw) {
         result = validateDebateWorkflow(name, w);
     else
         throw new Error(`Workflow "${name}": unknown pattern "${pattern}"`);
-    if (disabled)
-        return { ...result, disabled };
+    if (disabled || locked) {
+        return { ...result, ...(disabled ? { disabled } : {}), ...(locked ? { locked } : {}) };
+    }
     return result;
 }
 function validateSequentialWorkflow(name, w) {

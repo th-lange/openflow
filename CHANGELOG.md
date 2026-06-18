@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Interactive workflow builder** — `/build-workflow` activates a new primary `workflow-builder` agent that interviews the user element by element and writes a validated **sequential, commander-supervised** workflow to `openflow.json` (create and modify flows).
+- `list_agents` tool — read-only listing of available agents (optional `mode` filter), used by the builder to offer valid choices.
+- `locked: true` flag on workflow entries — locked workflows cannot be overwritten (even with `force`), enabled, or disabled by the management tools; marked `[locked]` in `list_workflows`.
+
+### Changed
+- Reserved the `workflow-builder` agent name so `create_agent` cannot clobber the built-in builder.
+
 ## [0.2.9] - 2026-06-18
 
 ### Added

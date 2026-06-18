@@ -405,3 +405,62 @@ describe("enable_workflow", () => {
     await assert.rejects(() => enableWorkflow("ghost", dir), /not found/);
   });
 });
+
+// ── locking + reserved names (#51) ─────────────────────────────────────────────
+
+describe("locked workflows", () => {
+  afterEach(teardown);
+
+  async function writeLocked(dir: string): Promise<void> {
+    await writeFile(
+      join(dir, "openflow.json"),
+      JSON.stringify({ workflows: { protected: { locked: true, sequence: ["coder"] } } }),
+      "utf-8"
+    );
+  }
+
+  it("refuses to overwrite a locked workflow even with force", async () => {
+    const dir = await setup();
+    await writeLocked(dir);
+    const client = makeClient(["coder", "analyzer"]);
+    await assert.rejects(
+      () => createWorkflow({ name: "protected", sequence: ["analyzer"], force: true }, client, dir),
+      /locked and cannot be modified/
+    );
+    // original entry untouched
+    const json = JSON.parse(await readFile(join(dir, "openflow.json"), "utf-8"));
+    assert.deepEqual(json.workflows.protected.sequence, ["coder"]);
+  });
+
+  it("refuses to disable a locked workflow", async () => {
+    const dir = await setup();
+    await writeLocked(dir);
+    await assert.rejects(() => disableWorkflow("protected", dir), /locked and cannot be enabled or disabled/);
+  });
+
+  it("refuses to enable a locked workflow", async () => {
+    const dir = await setup();
+    await writeLocked(dir);
+    await assert.rejects(() => enableWorkflow("protected", dir), /locked and cannot be enabled or disabled/);
+  });
+
+  it("round-trips the locked flag through the loader", async () => {
+    const dir = await setup();
+    await writeLocked(dir);
+    const { getWorkflow } = await import("../tools/workflow-tools.js");
+    const wf = await getWorkflow("protected", dir);
+    assert.equal(wf.locked, true);
+  });
+});
+
+describe("reserved agent names", () => {
+  afterEach(teardown);
+
+  it("refuses to create or overwrite the reserved workflow-builder agent", async () => {
+    const dir = await setup();
+    await assert.rejects(
+      () => createAgent({ name: "workflow-builder", prompt: "hijack" }, dir),
+      /reserved by openflow/
+    );
+  });
+});

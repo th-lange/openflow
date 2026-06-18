@@ -12,6 +12,7 @@ export type SequentialWorkflow = {
   pattern: "sequential";
   description?: string;
   disabled?: boolean;
+  locked?: boolean;
   sequence: SequenceStep[];
   commanderMayAlsoUse: string[];
 };
@@ -20,6 +21,7 @@ export type OrchestratorWorkflow = {
   pattern: "orchestrator";
   description?: string;
   disabled?: boolean;
+  locked?: boolean;
   agents: string[];
   maxIterations: number;
   satisfactionCriteria: string;
@@ -29,6 +31,7 @@ export type EvaluatorOptimizerWorkflow = {
   pattern: "evaluator-optimizer";
   description?: string;
   disabled?: boolean;
+  locked?: boolean;
   producer: string;
   evaluator: string;
   maxIterations: number;
@@ -39,6 +42,7 @@ export type ConditionalWorkflow = {
   pattern: "conditional";
   description?: string;
   disabled?: boolean;
+  locked?: boolean;
   router: string;
   routes: Array<{ condition: string; workflow: string }>;
   default: string;
@@ -48,6 +52,7 @@ export type FanoutWorkflow = {
   pattern: "fanout";
   description?: string;
   disabled?: boolean;
+  locked?: boolean;
   agents: string[];
   picker: string;
   pickerPrompt?: string;
@@ -57,6 +62,7 @@ export type ParallelWorkflow = {
   pattern: "parallel";
   description?: string;
   disabled?: boolean;
+  locked?: boolean;
   subtasks: Array<{ agent: string; prompt: string }>;
   merger: string;
 };
@@ -65,6 +71,7 @@ export type DebateWorkflow = {
   pattern: "debate";
   description?: string;
   disabled?: boolean;
+  locked?: boolean;
   proposer: string;
   critic: string;
   rounds: number;
@@ -375,6 +382,7 @@ export function parseWorkflowEntry(name: string, raw: unknown): Workflow {
   const w = raw as Record<string, unknown>;
   const pattern = w["pattern"] ?? "sequential";
   const disabled = w["disabled"] === true ? true : undefined;
+  const locked = w["locked"] === true ? true : undefined;
 
   let result: Workflow;
   if (pattern === "sequential") result = validateSequentialWorkflow(name, w);
@@ -386,7 +394,9 @@ export function parseWorkflowEntry(name: string, raw: unknown): Workflow {
   else if (pattern === "debate") result = validateDebateWorkflow(name, w);
   else throw new Error(`Workflow "${name}": unknown pattern "${pattern}"`);
 
-  if (disabled) return { ...result, disabled } as Workflow;
+  if (disabled || locked) {
+    return { ...result, ...(disabled ? { disabled } : {}), ...(locked ? { locked } : {}) } as Workflow;
+  }
   return result;
 }
 
