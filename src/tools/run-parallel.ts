@@ -1,3 +1,4 @@
+import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import { parallelDispatch } from "./parallel-dispatch.js";
 import type { ParallelWorkflow } from "../config/workflow-loader.js";
@@ -7,7 +8,8 @@ export async function runParallel(
   prompt: string,
   context: string | undefined,
   sessionId: string | undefined,
-  serverUrl: string
+  client: OpencodeClient,
+  signal?: AbortSignal
 ): Promise<string> {
   const { subtasks, merger } = workflow;
 
@@ -26,7 +28,7 @@ export async function runParallel(
     sessionId,
   }));
 
-  const results = await parallelDispatch(tasks, serverUrl);
+  const results = await parallelDispatch(tasks, client, signal);
 
   const successful = results.filter((r) => !r.error);
   if (successful.length === 0) {
@@ -51,7 +53,8 @@ export async function runParallel(
 
   const { result: mergerOutput } = await delegateTask(
     { agent: merger, prompt: mergerPrompt, context: resultsContext, sessionId },
-    serverUrl
+    client,
+    signal
   );
 
   return [

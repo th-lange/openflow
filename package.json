@@ -43,9 +43,10 @@
   "homepage": "https://github.com/th-lange/openflow#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@opencode-ai/plugin": "^1.17.8",
     "@opencode-ai/sdk": "^1.17.7",
     "jsonc-parser": "^3.3.1",
-    "zod": "^4.4.3"
+    "zod": "4.1.8"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",

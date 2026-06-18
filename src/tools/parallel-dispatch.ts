@@ -1,3 +1,4 @@
+import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import type { DelegateTaskInput } from "./delegate-task.js";
 
@@ -12,7 +13,8 @@ const MAX_CONCURRENT = 5;
 
 export async function parallelDispatch(
   tasks: DelegateTaskInput[],
-  serverUrl: string
+  client: OpencodeClient,
+  signal?: AbortSignal
 ): Promise<DispatchResult[]> {
   const results: DispatchResult[] = new Array(tasks.length);
 
@@ -22,7 +24,7 @@ export async function parallelDispatch(
       batch.map(async (task, batchIdx) => {
         const index = start + batchIdx;
         try {
-          const { result } = await delegateTask(task, serverUrl);
+          const { result } = await delegateTask(task, client, signal);
           return { index, agent: task.agent, output: result };
         } catch (e) {
           return {

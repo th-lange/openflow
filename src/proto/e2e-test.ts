@@ -232,7 +232,7 @@ try {
 
 console.log("\nScenario 7: delegate_task with unknown agent");
 try {
-  await delegateTask({ agent: "ghost-agent-xyz", prompt: "hi" }, SERVER_URL);
+  await delegateTask({ agent: "ghost-agent-xyz", prompt: "hi" }, client);
   fail("7. Unknown agent in delegate_task", "Should have thrown but did not");
 } catch (e) {
   const msg = String(e);
