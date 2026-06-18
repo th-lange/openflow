@@ -22,6 +22,15 @@ export async function getAgentRegistry(
   return cache;
 }
 
+/** List agents, optionally filtered by mode. Read-only (backs the list_agents tool). */
+export async function listAgents(
+  client: OpencodeClient,
+  mode?: AgentEntry["mode"]
+): Promise<AgentEntry[]> {
+  const registry = await getAgentRegistry(client);
+  return mode ? registry.filter((a) => a.mode === mode) : registry;
+}
+
 export async function assertAgentExists(
   client: OpencodeClient,
   name: string

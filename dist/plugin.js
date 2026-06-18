@@ -3,6 +3,7 @@ import { z } from "zod";
 import { delegateTask } from "./tools/delegate-task.js";
 import { getWorkflow, listWorkflows, summariseWorkflow, isValidWorkflow, } from "./tools/workflow-tools.js";
 import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "./tools/management-tools.js";
+import { listAgents } from "./config/agent-registry.js";
 import { runWorkflow } from "./tools/run-workflow.js";
 import { loadWorkflows, resolveSettings } from "./config/workflow-loader.js";
 import { createWorkflowArgs, createAgentArgs } from "./tools/schemas.js";
@@ -47,6 +48,23 @@ export const openflow = async ({ client, directory }) => {
                             return `- ${w.name}${tag} ⚠ invalid: ${w.error}`;
                         return `- ${w.name}${tag}${w.description ? `: ${w.description}` : ""} (${summariseWorkflow(w)})`;
                     })
+                        .join("\n");
+                },
+            }),
+            list_agents: tool({
+                description: "List the agents available in this project (from opencode.json). Use this to discover valid agent names before referencing them in a workflow.",
+                args: {
+                    mode: z
+                        .enum(["subagent", "primary", "all"])
+                        .optional()
+                        .describe("Filter to agents of this mode (default: all modes)"),
+                },
+                async execute({ mode }) {
+                    const agents = await listAgents(client, mode);
+                    if (agents.length === 0)
+                        return "No agents found.";
+                    return agents
+                        .map((a) => `- ${a.name} (${a.mode})${a.description ? `: ${a.description}` : ""}`)
                         .join("\n");
                 },
             }),
