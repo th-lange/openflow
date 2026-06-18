@@ -1,3 +1,4 @@
+import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
 import type { ConditionalWorkflow } from "../config/workflow-loader.js";
@@ -7,8 +8,9 @@ export type WorkflowDispatch = (
   prompt: string,
   context: string | undefined,
   sessionId: string | undefined,
-  serverUrl: string,
-  workDir: string
+  client: OpencodeClient,
+  workDir: string,
+  signal?: AbortSignal
 ) => Promise<string>;
 
 export async function runConditional(
@@ -16,9 +18,10 @@ export async function runConditional(
   prompt: string,
   context: string | undefined,
   sessionId: string | undefined,
-  serverUrl: string,
+  client: OpencodeClient,
   workDir: string,
-  dispatch: WorkflowDispatch
+  dispatch: WorkflowDispatch,
+  signal?: AbortSignal
 ): Promise<string> {
   const { router, routes, default: defaultWorkflow } = workflow;
   const conditions = routes.map((r) => r.condition);
@@ -36,7 +39,8 @@ export async function runConditional(
 
   const { result: routerOutput } = await delegateTask(
     { agent: router, prompt: routerPrompt, context, sessionId },
-    serverUrl
+    client,
+    signal
   );
 
   const block = parseOpenflowBlock(routerOutput);
@@ -49,6 +53,6 @@ export async function runConditional(
     ? `Routing → ${targetName} (matched: "${routeLabel}")`
     : `No route matched "${routeLabel ?? "(none)"}". Using default: ${targetName}`;
 
-  const targetResult = await dispatch(targetName, prompt, context, sessionId, serverUrl, workDir);
+  const targetResult = await dispatch(targetName, prompt, context, sessionId, client, workDir, signal);
   return `${routingNote}\n\n${targetResult}`;
 }

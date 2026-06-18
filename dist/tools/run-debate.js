@@ -3,7 +3,7 @@ import { parseOpenflowBlock } from "../utils/openflow-block.js";
 function transcript(turns) {
     return turns.map((t, i) => `## Turn ${i + 1} — ${t.role}\n${t.content}`).join("\n\n");
 }
-export async function runDebate(workflow, prompt, context, sessionId, serverUrl) {
+export async function runDebate(workflow, prompt, context, sessionId, client, signal) {
     const { proposer, critic, rounds, judge } = workflow;
     const turns = [];
     // --- Proposer: initial case ---
@@ -12,7 +12,7 @@ export async function runDebate(workflow, prompt, context, sessionId, serverUrl)
         prompt: `${prompt}\n\nYou are the proposer. Make your case clearly and persuasively.`,
         context,
         sessionId,
-    }, serverUrl);
+    }, client, signal);
     turns.push({ role: "proposer", content: initial });
     // --- Rounds: critic then proposer (until final round) ---
     for (let round = 1; round <= rounds; round++) {
@@ -21,7 +21,7 @@ export async function runDebate(workflow, prompt, context, sessionId, serverUrl)
             prompt: `${prompt}\n\nYou are the critic. Argue against the latest proposer position. Be specific and constructive.`,
             context: transcript(turns),
             sessionId,
-        }, serverUrl);
+        }, client, signal);
         turns.push({ role: `critic (round ${round})`, content: criticOutput });
         if (round < rounds) {
             const { result: proposerResponse } = await delegateTask({
@@ -29,7 +29,7 @@ export async function runDebate(workflow, prompt, context, sessionId, serverUrl)
                 prompt: `${prompt}\n\nYou are the proposer. Respond to the critic's latest argument.`,
                 context: transcript(turns),
                 sessionId,
-            }, serverUrl);
+            }, client, signal);
             turns.push({ role: `proposer (round ${round})`, content: proposerResponse });
         }
     }
@@ -39,7 +39,7 @@ export async function runDebate(workflow, prompt, context, sessionId, serverUrl)
         prompt: `${prompt}\n\nYou are the proposer. Give your final closing rebuttal. Be concise and decisive.`,
         context: transcript(turns),
         sessionId,
-    }, serverUrl);
+    }, client, signal);
     turns.push({ role: "proposer (rebuttal)", content: rebuttal });
     // --- Judge ---
     const judgePrompt = [
@@ -52,7 +52,7 @@ export async function runDebate(workflow, prompt, context, sessionId, serverUrl)
         "```",
         'Valid decisions: "adopt" (accept the proposal), "reject" (reject it), "revise" (accept with modifications).',
     ].join("\n");
-    const { result: judgeOutput } = await delegateTask({ agent: judge, prompt: judgePrompt, context: transcript(turns), sessionId }, serverUrl);
+    const { result: judgeOutput } = await delegateTask({ agent: judge, prompt: judgePrompt, context: transcript(turns), sessionId }, client, signal);
     const block = parseOpenflowBlock(judgeOutput);
     const decision = typeof block?.decision === "string" ? block.decision : "(no decision)";
     return [

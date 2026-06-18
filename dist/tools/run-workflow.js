@@ -13,17 +13,17 @@ function stepLabel(step) {
     return "[checkpoint]";
 }
 // ── Sequential ────────────────────────────────────────────────────────────────
-export async function runSequential(workflow, prompt, initialContext, sessionId, serverUrl, workDir, dispatch) {
+export async function runSequential(workflow, prompt, initialContext, sessionId, client, workDir, dispatch, signal) {
     const { sequence } = workflow;
     const stepResults = [];
     let context = initialContext ?? "";
     for (const step of sequence) {
         let output;
         if (typeof step === "string") {
-            ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, serverUrl));
+            ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, client, signal));
         }
         else if ("workflow" in step) {
-            output = await dispatch(step.workflow, prompt, context, sessionId, serverUrl, workDir);
+            output = await dispatch(step.workflow, prompt, context, sessionId, client, workDir, signal);
         }
         else {
             // checkpoint — top-level commander handles these; if we get here it means
@@ -51,21 +51,21 @@ export async function runSequential(workflow, prompt, initialContext, sessionId,
     ].join("\n");
 }
 // ── Dispatcher ────────────────────────────────────────────────────────────────
-export async function runWorkflow(name, prompt, context, sessionId, serverUrl, workDir) {
+export async function runWorkflow(name, prompt, context, sessionId, client, workDir, signal) {
     const workflow = await getWorkflow(name, workDir);
     switch (workflow.pattern) {
         case "sequential":
-            return runSequential(workflow, prompt, context, sessionId, serverUrl, workDir, runWorkflow);
+            return runSequential(workflow, prompt, context, sessionId, client, workDir, runWorkflow, signal);
         case "evaluator-optimizer":
-            return runEvaluatorOptimizer(workflow, prompt, context, sessionId, serverUrl);
+            return runEvaluatorOptimizer(workflow, prompt, context, sessionId, client, signal);
         case "conditional":
-            return runConditional(workflow, prompt, context, sessionId, serverUrl, workDir, runWorkflow);
+            return runConditional(workflow, prompt, context, sessionId, client, workDir, runWorkflow, signal);
         case "fanout":
-            return runFanout(workflow, prompt, context, sessionId, serverUrl);
+            return runFanout(workflow, prompt, context, sessionId, client, signal);
         case "parallel":
-            return runParallel(workflow, prompt, context, sessionId, serverUrl);
+            return runParallel(workflow, prompt, context, sessionId, client, signal);
         case "debate":
-            return runDebate(workflow, prompt, context, sessionId, serverUrl);
+            return runDebate(workflow, prompt, context, sessionId, client, signal);
         case "orchestrator":
             throw new Error(`Workflow "${name}" uses pattern "orchestrator" which is prompt-driven. ` +
                 `Handle it via delegate_task loops per your system instructions.`);

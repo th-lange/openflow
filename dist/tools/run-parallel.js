@@ -1,6 +1,6 @@
 import { delegateTask } from "./delegate-task.js";
 import { parallelDispatch } from "./parallel-dispatch.js";
-export async function runParallel(workflow, prompt, context, sessionId, serverUrl) {
+export async function runParallel(workflow, prompt, context, sessionId, client, signal) {
     const { subtasks, merger } = workflow;
     // Pass the user's overall task as context so each subtask agent understands the bigger picture
     const subtaskContext = [
@@ -15,7 +15,7 @@ export async function runParallel(workflow, prompt, context, sessionId, serverUr
         context: subtaskContext || undefined,
         sessionId,
     }));
-    const results = await parallelDispatch(tasks, serverUrl);
+    const results = await parallelDispatch(tasks, client, signal);
     const successful = results.filter((r) => !r.error);
     if (successful.length === 0) {
         throw new Error(`All ${subtasks.length} parallel subtasks failed`);
@@ -34,7 +34,7 @@ export async function runParallel(workflow, prompt, context, sessionId, serverUr
             ? [`Note: some subtasks failed (marked above). Work with what succeeded.`]
             : []),
     ].join("\n");
-    const { result: mergerOutput } = await delegateTask({ agent: merger, prompt: mergerPrompt, context: resultsContext, sessionId }, serverUrl);
+    const { result: mergerOutput } = await delegateTask({ agent: merger, prompt: mergerPrompt, context: resultsContext, sessionId }, client, signal);
     return [
         `Parallel complete ✅ — ${successful.length}/${subtasks.length} subtasks succeeded`,
         "",
