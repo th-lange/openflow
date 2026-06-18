@@ -18,7 +18,6 @@
     "build": "npm run build:agents && tsc",
     "prepublishOnly": "npm run build",
     "proto": "node --import tsx/esm src/proto/spawn-test.ts",
-    "start": "node dist/mcp.js",
     "e2e": "node --import tsx/esm src/proto/e2e-test.ts"
   },
   "repository": {
@@ -42,7 +41,6 @@
   },
   "homepage": "https://github.com/th-lange/openflow#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/plugin": "^1.17.8",
     "@opencode-ai/sdk": "^1.17.7",
     "jsonc-parser": "^3.3.1",

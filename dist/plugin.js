@@ -8,11 +8,11 @@ import { loadWorkflows } from "./config/workflow-loader.js";
 import { createWorkflowArgs, createAgentArgs } from "./tools/schemas.js";
 // Native OpenCode plugin entrypoint (ADR 0001 / #39).
 //
-// Unlike the MCP stdio server (src/mcp.ts), the plugin host injects an
-// already-connected `client` plus the correct `directory`, so the deterministic
-// engine can spawn child sessions directly — no OPENCODE_URL/OPENCODE_CWD
-// guessing. Tools are registered via the `tool()` helper and use the per-call
-// ToolContext (directory, sessionID, abort) for path resolution and cancellation.
+// The plugin host injects an already-connected `client` plus the correct
+// `directory`, so the deterministic engine spawns child sessions directly — no
+// OPENCODE_URL/OPENCODE_CWD guessing. Tools are registered via the `tool()`
+// helper and use the per-call ToolContext (directory, sessionID, abort) for
+// path resolution and cancellation.
 export const openflow = async ({ client, directory }) => {
     // Validate openflow.json once at startup; log problems without bricking the host (#34).
     loadWorkflows(client, directory).catch((e) => {

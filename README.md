@@ -48,7 +48,7 @@ To install into a specific project instead:
 openflow install /path/to/project
 ```
 
-Either way, the command writes the MCP server entry, the `/workflow` slash command, and all agent definitions to `opencode.jsonc` / `opencode.json`. Re-running is safe — existing entries are never overwritten.
+Either way, the command registers the openflow **plugin**, the `/workflow` slash command, and all agent definitions in `opencode.jsonc` / `opencode.json`. Re-running is safe — existing entries are never overwritten. Comments and formatting in your config are preserved.
 
 ### 1.3 Create `openflow.json` in your project
 
@@ -74,7 +74,9 @@ See [Configuration](#3-configuration) for all patterns and [Options](#4-options)
 opencode
 ```
 
-OpenCode loads the MCP server on startup. Eight tools become available: `delegate_task`, `run_workflow`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
+OpenCode loads the openflow plugin on startup and validates `openflow.json` (unknown agents, dangling workflow references, and cycles are reported in the OpenCode logs). Eight tools become available: `run_workflow`, `delegate_task`, `get_workflow`, `list_workflows`, `create_workflow`, `create_agent`, `enable_workflow`, `disable_workflow`.
+
+The commander runs code-driven patterns via `run_workflow` — fan-out and parallel branches execute concurrently, and iteration/round limits are enforced in code, not left to the model.
 
 The `/workflow` command routes directly to the `commander` agent regardless of which agent is currently active in your session.
 
@@ -112,7 +114,7 @@ Create a workflow called "hotfix" that runs coder then analyzer,
 with the description "Fast path for urgent fixes".
 ```
 
-The commander calls `create_workflow`, validates agent names, and writes to `openflow.json`. Available immediately — no restart needed.
+The commander calls `create_workflow`, which supports every pattern (not just sequential). The new entry is validated — shape, referenced agents, workflow references, and cycles — before it is written to `openflow.json`, and rolled back if invalid. Available immediately — no restart needed.
 
 ### Create an agent
 
@@ -415,7 +417,7 @@ Accepted by all patterns:
 | `model` | system default | Model override, e.g. `anthropic/claude-haiku-4-5` or `anthropic/claude-opus-4-8` |
 | `permission.edit` | `deny` | `allow` or `deny` file edits |
 | `permission.bash` | `deny` | `allow` or `deny` shell commands |
-| `tools` | `{}` | Additional MCP tool scopes |
+| `tools` | `{}` | Per-tool enable/disable map for the agent |
 
 ### Built-in agents
 
@@ -460,9 +462,16 @@ The repo's [`openflow.json`](./openflow.json) contains ready-to-use examples. Co
 
 ```bash
 npm test       # Unit tests (~300 ms, no LLM needed)
+npm run build  # Regenerate opencode.json agents from src/agents/*.md, then tsc → dist/
 npm run proto  # Validate session spawning works in your environment
 npm run e2e    # Full E2E suite — requires a running OpenCode server and LLM (~5 min)
 ```
+
+Agent prompts are authored in `src/agents/<name>.md` (a metadata block plus the
+prompt body) and generated into `opencode.json` by `npm run build:agents`, which
+`npm run build` runs first. Edit the `.md` files, not the JSON. The plugin
+entrypoint is `src/plugin.ts` (built to `dist/plugin.js`); CI fails if the
+committed `dist/` or `opencode.json` drifts from a fresh build.
 
 ---
 
