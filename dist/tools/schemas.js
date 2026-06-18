@@ -1,8 +1,7 @@
 import { z } from "zod";
-// Shared Zod arg shapes for the openflow tools, so the MCP server (src/mcp.ts)
-// and the native plugin (src/plugin.ts) expose identical interfaces and can't
-// drift. Each export is a ZodRawShape usable directly by both MCP's
-// `server.tool(name, desc, shape, handler)` and the plugin `tool({ args })`.
+// Shared Zod arg shapes for the openflow tools. Each export is a ZodRawShape
+// consumed directly by the plugin's `tool({ args })` (src/plugin.ts), kept in
+// one place so tool interfaces stay consistent.
 export const sequenceStepSchema = z.union([
     z.string(),
     z.object({ workflow: z.string() }),
