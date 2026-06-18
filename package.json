@@ -13,7 +13,7 @@
     "openflow.json"
   ],
   "scripts": {
-    "test": "node --import tsx/esm --test src/test/**/*.test.ts",
+    "test": "node --import tsx/esm --test src/test/*.test.ts",
     "build:agents": "node scripts/build-agents.mjs",
     "build": "npm run build:agents && tsc",
     "prepublishOnly": "npm run build",
