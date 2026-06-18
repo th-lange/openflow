@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "test": "node --import tsx/esm --test src/test/**/*.test.ts",
-    "build": "tsc",
+    "build:agents": "node scripts/build-agents.mjs",
+    "build": "npm run build:agents && tsc",
     "prepublishOnly": "npm run build",
     "proto": "node --import tsx/esm src/proto/spawn-test.ts",
     "start": "node dist/mcp.js",
