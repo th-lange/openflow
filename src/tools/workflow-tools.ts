@@ -1,119 +1,24 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-import type { Workflow, SequenceStep } from "../config/workflow-loader.js";
+import {
+  parseWorkflowEntry,
+  readOpenflowFile,
+  type Workflow,
+} from "../config/workflow-loader.js";
 
 export type WorkflowInfo = Workflow & { name: string };
 
-async function readOpenflowJson(directory: string): Promise<Record<string, unknown>> {
-  const path = resolve(directory, "openflow.json");
-  let raw: string;
-  try {
-    raw = await readFile(path, "utf-8");
-  } catch {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    throw new Error("openflow.json is not valid JSON");
-  }
-}
+/** An entry that failed to parse — surfaced in listings so it isn't silently hidden. */
+export type InvalidWorkflowInfo = {
+  name: string;
+  invalid: true;
+  error: string;
+  disabled?: boolean;
+};
 
-function parseSequenceStep(item: unknown): SequenceStep {
-  if (typeof item === "string") return item;
-  if (typeof item === "object" && item !== null) {
-    const obj = item as Record<string, unknown>;
-    if (typeof obj["checkpoint"] === "string") return { checkpoint: obj["checkpoint"] };
-    if (typeof obj["workflow"] === "string") return { workflow: obj["workflow"] };
-  }
-  return String(item);
-}
-
-function parseWorkflowEntry(name: string, raw: unknown): WorkflowInfo {
-  if (!raw || typeof raw !== "object") {
-    return { name, pattern: "sequential", sequence: [], commanderMayAlsoUse: [] };
-  }
-  const w = raw as Record<string, unknown>;
-  const pattern = (w["pattern"] as string) ?? "sequential";
-  const description = typeof w["description"] === "string" ? w["description"] : undefined;
-  const disabled = w["disabled"] === true ? true : undefined;
-
-  switch (pattern) {
-    case "orchestrator":
-      return {
-        name, pattern: "orchestrator", description, disabled,
-        agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
-        maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 6,
-        satisfactionCriteria: typeof w["satisfactionCriteria"] === "string" ? w["satisfactionCriteria"] : "",
-      };
-
-    case "evaluator-optimizer":
-      return {
-        name, pattern: "evaluator-optimizer", description, disabled,
-        producer: typeof w["producer"] === "string" ? w["producer"] : "",
-        evaluator: typeof w["evaluator"] === "string" ? w["evaluator"] : "",
-        maxIterations: typeof w["maxIterations"] === "number" ? w["maxIterations"] : 3,
-        passCriteria: typeof w["passCriteria"] === "string" ? w["passCriteria"] : "PASS",
-      };
-
-    case "conditional": {
-      const routes = Array.isArray(w["routes"])
-        ? (w["routes"] as Array<Record<string, unknown>>).map((r) => ({
-            condition: typeof r["condition"] === "string" ? r["condition"] : "",
-            workflow: typeof r["workflow"] === "string" ? r["workflow"] : "",
-          }))
-        : [];
-      return {
-        name, pattern: "conditional", description, disabled,
-        router: typeof w["router"] === "string" ? w["router"] : "",
-        routes,
-        default: typeof w["default"] === "string" ? w["default"] : "",
-      };
-    }
-
-    case "fanout":
-      return {
-        name, pattern: "fanout", description, disabled,
-        agents: Array.isArray(w["agents"]) ? (w["agents"] as string[]) : [],
-        picker: typeof w["picker"] === "string" ? w["picker"] : "",
-        pickerPrompt: typeof w["pickerPrompt"] === "string" ? w["pickerPrompt"] : undefined,
-      };
-
-    case "parallel": {
-      const subtasks = Array.isArray(w["subtasks"])
-        ? (w["subtasks"] as Array<Record<string, unknown>>).map((s) => ({
-            agent: typeof s["agent"] === "string" ? s["agent"] : "",
-            prompt: typeof s["prompt"] === "string" ? s["prompt"] : "",
-          }))
-        : [];
-      return {
-        name, pattern: "parallel", description, disabled,
-        subtasks,
-        merger: typeof w["merger"] === "string" ? w["merger"] : "",
-      };
-    }
-
-    case "debate":
-      return {
-        name, pattern: "debate", description, disabled,
-        proposer: typeof w["proposer"] === "string" ? w["proposer"] : "",
-        critic: typeof w["critic"] === "string" ? w["critic"] : "",
-        rounds: typeof w["rounds"] === "number" ? w["rounds"] : 2,
-        judge: typeof w["judge"] === "string" ? w["judge"] : "",
-      };
-
-    default:
-      return {
-        name, pattern: "sequential", description, disabled,
-        sequence: Array.isArray(w["sequence"])
-          ? (w["sequence"] as unknown[]).map(parseSequenceStep)
-          : [],
-        commanderMayAlsoUse: Array.isArray(w["commanderMayAlsoUse"])
-          ? (w["commanderMayAlsoUse"] as string[])
-          : [],
-      };
-  }
+async function readWorkflowsMap(directory: string): Promise<Record<string, unknown>> {
+  const parsed = await readOpenflowFile(directory);
+  if (parsed === undefined || typeof parsed !== "object" || parsed === null) return {};
+  const workflows = (parsed as Record<string, unknown>)["workflows"];
+  return workflows && typeof workflows === "object" ? (workflows as Record<string, unknown>) : {};
 }
 
 export function summariseWorkflow(w: WorkflowInfo): string {
@@ -121,11 +26,7 @@ export function summariseWorkflow(w: WorkflowInfo): string {
     case "sequential":
       return w.sequence
         .map((s) =>
-          typeof s === "string"
-            ? s
-            : "workflow" in s
-            ? `[${s.workflow}]`
-            : "[checkpoint]"
+          typeof s === "string" ? s : "workflow" in s ? `[${s.workflow}]` : "[checkpoint]"
         )
         .join(" → ");
     case "orchestrator":
@@ -143,20 +44,20 @@ export function summariseWorkflow(w: WorkflowInfo): string {
   }
 }
 
+/**
+ * Look up and parse a single workflow by name. Uses the same parser as the
+ * startup validator (#38), so a workflow that `getWorkflow` accepts is one the
+ * loader would too. Throws on unknown, disabled, or malformed workflows.
+ */
 export async function getWorkflow(
   name: string,
   directory: string = process.cwd()
 ): Promise<WorkflowInfo> {
-  const config = await readOpenflowJson(directory);
-  const workflows = config["workflows"];
-  if (!workflows || typeof workflows !== "object") {
-    throw new Error("No workflows defined in openflow.json");
-  }
-  const raw = (workflows as Record<string, unknown>)[name];
+  const workflows = await readWorkflowsMap(directory);
+  const raw = workflows[name];
   if (!raw || typeof raw !== "object") {
-    const available = Object.keys(workflows as object)
-      .filter((k) => (workflows as Record<string, unknown>)[k] &&
-        (workflows as Record<string, Record<string, unknown>>)[k]["disabled"] !== true)
+    const available = Object.keys(workflows)
+      .filter((k) => (workflows[k] as Record<string, unknown>)?.["disabled"] !== true)
       .join(", ");
     throw new Error(`Workflow "${name}" not found. Available: ${available || "(none)"}`);
   }
@@ -164,18 +65,41 @@ export async function getWorkflow(
   if (parsed.disabled) {
     throw new Error(`Workflow "${name}" is disabled`);
   }
-  return parsed;
+  return { ...parsed, name };
 }
 
+/**
+ * List workflows. Parses each entry with the canonical parser; an entry that
+ * fails to parse is returned as an `InvalidWorkflowInfo` rather than crashing
+ * the whole listing or being silently dropped.
+ */
 export async function listWorkflows(
   directory: string = process.cwd(),
   includeDisabled = false
-): Promise<WorkflowInfo[]> {
-  const config = await readOpenflowJson(directory);
-  const workflows = config["workflows"];
-  if (!workflows || typeof workflows !== "object") return [];
-  const all = Object.entries(workflows as Record<string, unknown>).map(([name, raw]) =>
-    parseWorkflowEntry(name, raw)
-  );
-  return includeDisabled ? all : all.filter((w) => !w.disabled);
+): Promise<Array<WorkflowInfo | InvalidWorkflowInfo>> {
+  const workflows = await readWorkflowsMap(directory);
+  const out: Array<WorkflowInfo | InvalidWorkflowInfo> = [];
+  for (const [name, raw] of Object.entries(workflows)) {
+    const isDisabled = (raw as Record<string, unknown>)?.["disabled"] === true;
+    if (isDisabled && !includeDisabled) continue;
+    try {
+      const parsed = parseWorkflowEntry(name, raw);
+      out.push({ ...parsed, name });
+    } catch (e) {
+      out.push({
+        name,
+        invalid: true,
+        error: e instanceof Error ? e.message : String(e),
+        ...(isDisabled ? { disabled: true } : {}),
+      });
+    }
+  }
+  return out;
+}
+
+/** Type guard separating valid workflow infos from invalid ones in a listing. */
+export function isValidWorkflow(
+  w: WorkflowInfo | InvalidWorkflowInfo
+): w is WorkflowInfo {
+  return !("invalid" in w);
 }

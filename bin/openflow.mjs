@@ -3,8 +3,10 @@ import { readFile, writeFile, access, mkdir } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { parse, modify, applyEdits } from "jsonc-parser";
 
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const FORMATTING = { tabSize: 2, insertSpaces: true, eol: "\n" };
 
 // OpenCode global config dir: respects XDG_CONFIG_HOME, falls back to ~/.config/opencode
 // Windows: %APPDATA%\opencode
@@ -31,46 +33,21 @@ async function resolveConfigPath(dir) {
   return { read: jsonPath, write: jsonPath }; // neither exists — create .json
 }
 
-// Parse JSONC: strip // and /* */ comments (skipping string literals), remove trailing commas
-function normalizeJsonc(src) {
-  let out = "";
-  let i = 0;
-  while (i < src.length) {
-    if (src[i] === '"') {
-      // String literal — copy verbatim so // inside URLs is preserved
-      out += src[i++];
-      while (i < src.length) {
-        if (src[i] === "\\") { out += src[i] + (src[i + 1] ?? ""); i += 2; }
-        else if (src[i] === '"') { out += src[i++]; break; }
-        else { out += src[i++]; }
-      }
-    } else if (src[i] === "/" && src[i + 1] === "/") {
-      while (i < src.length && src[i] !== "\n") i++;
-    } else if (src[i] === "/" && src[i + 1] === "*") {
-      i += 2;
-      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++;
-      i += 2;
-    } else {
-      out += src[i++];
-    }
-  }
-  return out.replace(/,(\s*[}\]])/g, "$1");
-}
-
-async function readConfig(path) {
+async function readText(path) {
   try {
-    const raw = await readFile(path, "utf-8");
-    const text = path.endsWith(".jsonc") ? normalizeJsonc(raw) : raw;
-    return JSON.parse(text);
+    return await readFile(path, "utf-8");
   } catch (e) {
-    if (e.code === "ENOENT") return {};
+    if (e.code === "ENOENT") return "";
     throw new Error(`Could not read ${path}: ${e.message}`);
   }
 }
 
-async function writeJson(path, data) {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify(data, null, 2) + "\n", "utf-8");
+// Parse JSON or JSONC (comments + trailing commas tolerated) into an object.
+function parseConfig(text) {
+  if (!text.trim()) return {};
+  const errors = [];
+  const parsed = parse(text, errors, { allowTrailingComma: true });
+  return parsed && typeof parsed === "object" ? parsed : {};
 }
 
 async function install(targetDir) {
@@ -79,19 +56,20 @@ async function install(targetDir) {
 
   console.log(`  Target: ${write}`);
 
-  const config = await readConfig(read);
+  // Edit the original text in place so comments and formatting survive (#36).
+  let text = (await readText(read)) || "{}\n";
+  const config = parseConfig(text);
+  const edits = []; // [{ path, value }]
   let changed = false;
 
   // ── MCP server ──────────────────────────────────────────────────────────────
-  const mcp = config.mcp ?? {};
-  if (!mcp.openflow) {
+  if (!config.mcp?.openflow) {
     const distMcp = resolve(PKG_ROOT, "dist", "mcp.js");
     const useBuilt = await fileExists(distMcp);
     const mcpCommand = useBuilt
       ? ["node", distMcp]
       : ["node", "--import", "tsx/esm", resolve(PKG_ROOT, "src", "mcp.ts")];
-    mcp.openflow = { type: "local", command: mcpCommand };
-    config.mcp = mcp;
+    edits.push({ path: ["mcp", "openflow"], value: { type: "local", command: mcpCommand } });
     changed = true;
     console.log("  ✓ MCP server configured");
   } else {
@@ -101,14 +79,15 @@ async function install(targetDir) {
   // ── /workflow slash command ──────────────────────────────────────────────────
   // Uses the JSON "command" config key so OpenCode routes to commander automatically,
   // regardless of which agent the user currently has active.
-  const command = config.command ?? {};
-  if (!command.workflow) {
-    command.workflow = {
-      description: "Run a named openflow workflow",
-      agent: "commander",
-      template: "Run workflow: $ARGUMENTS",
-    };
-    config.command = command;
+  if (!config.command?.workflow) {
+    edits.push({
+      path: ["command", "workflow"],
+      value: {
+        description: "Run a named openflow workflow",
+        agent: "commander",
+        template: "Run workflow: $ARGUMENTS",
+      },
+    });
     changed = true;
     console.log("  ✓ /workflow command registered");
   } else {
@@ -116,20 +95,19 @@ async function install(targetDir) {
   }
 
   // ── agents ───────────────────────────────────────────────────────────────────
-  const srcAgents = (await readConfig(resolve(PKG_ROOT, "opencode.json"))).agent ?? {};
-  const agents = config.agent ?? {};
+  const srcAgents = parseConfig(await readText(resolve(PKG_ROOT, "opencode.json"))).agent ?? {};
+  const existingAgents = config.agent ?? {};
   const added = [];
   const skipped = [];
   for (const [name, def] of Object.entries(srcAgents)) {
-    if (agents[name]) {
+    if (existingAgents[name]) {
       skipped.push(name);
     } else {
-      agents[name] = def;
+      edits.push({ path: ["agent", name], value: def });
       added.push(name);
     }
   }
   if (added.length > 0) {
-    config.agent = agents;
     changed = true;
     console.log(`  ✓ Agents added: ${added.join(", ")}`);
   }
@@ -138,7 +116,11 @@ async function install(targetDir) {
   }
 
   if (changed) {
-    await writeJson(write, config);
+    for (const { path, value } of edits) {
+      text = applyEdits(text, modify(text, path, value, { formattingOptions: FORMATTING }));
+    }
+    await mkdir(dirname(write), { recursive: true });
+    await writeFile(write, text.endsWith("\n") ? text : text + "\n", "utf-8");
     console.log(`\n  Wrote ${write}`);
   } else {
     console.log("\n  Already fully configured — nothing to change.");

@@ -1,6 +1,6 @@
 {
   "name": "openflow",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "OpenCode workflow orchestration plugin",
   "bin": {
     "openflow": "bin/openflow.mjs"
@@ -8,12 +8,14 @@
   "files": [
     "bin/",
     "dist/",
+    "src/",
     "opencode.json",
     "openflow.json"
   ],
   "scripts": {
-    "test": "node --import tsx/esm --test src/test/**/*.test.ts",
-    "build": "tsc",
+    "test": "node --import tsx/esm --test src/test/*.test.ts",
+    "build:agents": "node scripts/build-agents.mjs",
+    "build": "npm run build:agents && tsc",
     "prepublishOnly": "npm run build",
     "proto": "node --import tsx/esm src/proto/spawn-test.ts",
     "start": "node dist/mcp.js",
@@ -23,9 +25,17 @@
     "type": "git",
     "url": "git+https://github.com/th-lange/openflow.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "opencode",
+    "plugin",
+    "workflow",
+    "orchestration",
+    "agents",
+    "ai",
+    "mcp"
+  ],
+  "author": "Thomas Lange",
+  "license": "MIT",
   "type": "module",
   "bugs": {
     "url": "https://github.com/th-lange/openflow/issues"
@@ -34,6 +44,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opencode-ai/sdk": "^1.17.7",
+    "jsonc-parser": "^3.3.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

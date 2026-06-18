@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { parse, type ParseError } from "jsonc-parser";
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { assertAgentExists } from "./agent-registry.js";
 
@@ -81,28 +82,45 @@ export type Workflow =
 
 export type WorkflowRegistry = Record<string, Workflow>;
 
+// ── File read (single source — JSONC-tolerant) ──────────────────────────────────
+
+/**
+ * Read and parse `openflow.json` (JSON or JSONC) from `directory`.
+ * Returns the parsed top-level value, or `undefined` when the file is absent.
+ * Throws when the file exists but is not valid JSON/JSONC.
+ *
+ * This is the one read path shared by the validating loader and the runtime
+ * lookup tools (see workflow-tools.ts) — #38.
+ */
+export async function readOpenflowFile(
+  directory: string = process.cwd()
+): Promise<unknown | undefined> {
+  const path = resolve(directory, "openflow.json");
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf-8");
+  } catch {
+    return undefined;
+  }
+  if (!raw.trim()) return {};
+  const errors: ParseError[] = [];
+  const parsed = parse(raw, errors, { allowTrailingComma: true });
+  if (errors.length > 0) {
+    throw new Error("openflow.json is not valid JSON");
+  }
+  return parsed;
+}
+
 // ── Loader ────────────────────────────────────────────────────────────────────
 
 export async function loadWorkflows(
   client: OpencodeClient,
   directory: string = process.cwd()
 ): Promise<WorkflowRegistry> {
-  const path = resolve(directory, "openflow.json");
-  let raw: string;
-  try {
-    raw = await readFile(path, "utf-8");
-  } catch {
-    return {};
-  }
+  const parsed = await readOpenflowFile(directory);
+  if (parsed === undefined) return {};
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    throw new Error(`openflow.json is not valid JSON: ${(e as Error).message}`);
-  }
-
-  if (typeof parsed !== "object" || parsed === null) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("openflow.json must be a JSON object");
   }
 
@@ -112,7 +130,7 @@ export async function loadWorkflows(
 
   const registry: WorkflowRegistry = {};
   for (const [name, entry] of Object.entries(rawWorkflows as Record<string, unknown>)) {
-    registry[name] = validateWorkflow(name, entry);
+    registry[name] = parseWorkflowEntry(name, entry);
   }
 
   // 1. Validate all referenced agents exist (skip disabled workflows)
@@ -261,7 +279,12 @@ function detectCycles(registry: WorkflowRegistry): void {
 
 // ── Validators ────────────────────────────────────────────────────────────────
 
-function validateWorkflow(name: string, raw: unknown): Workflow {
+/**
+ * Parse and validate a single workflow entry into a typed `Workflow`.
+ * Throws on malformed input. This is the canonical per-entry parser shared by
+ * the loader and the runtime lookup tools (#38).
+ */
+export function parseWorkflowEntry(name: string, raw: unknown): Workflow {
   if (typeof raw !== "object" || raw === null) {
     throw new Error(`Workflow "${name}" must be an object`);
   }
