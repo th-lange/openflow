@@ -8,9 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.11] - 2026-06-21
+
 ### Added
-- **Structured handoffs** (#64) — sequential workflows now thread a compact ` ```handoff ` block (decided / files / next) between steps instead of the full transcript, and the relay shows intermediate steps as their handoff with the final step in full. Downstream agents re-read named files via their own tools. The built-in pipeline agents (`composer`, `coder`, `coder-strong`, `coder-weak`, `analyzer`) emit handoff blocks. Compact threading is the **default**; set `compactContext: false` per workflow to restore full-output threading.
-- **`contextScope` for sequential workflows** (#63) — control how much prior-step output is threaded into each step: `all` (default; current behavior), `last` (previous step only), or `none`. Cuts the O(n²) token growth on long sequences. Settable in `openflow.json` and via `create_workflow`; validated at load time.
+- **Structured handoffs** (#64) — sequential workflows now thread a compact ` ```handoff ` block (decided / files / next) between steps instead of the full transcript, and the relay shows intermediate steps as their handoff with the final step in full. Downstream agents re-read named files via their own tools. The built-in pipeline agents (`composer`, `coder`, `coder-strong`, `coder-weak`, `analyzer`) emit handoff blocks.
+- **`contextScope` for sequential workflows** (#63) — control how much prior-step output is threaded into each step: `all` (default), `last` (previous step only), or `none`. Cuts the O(n²) token growth on long sequences. Settable in `openflow.json` and via `create_workflow`; validated at load time.
+
+### Changed
+- **Compact context is now the default** for sequential workflows (#64): intermediate-step context and relay are threaded as handoff blocks rather than full outputs. This reduces token cost but changes what downstream steps see — set `compactContext: false` per workflow to restore the previous full-output behaviour.
 
 ## [0.2.10] - 2026-06-21
 
