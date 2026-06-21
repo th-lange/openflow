@@ -10,6 +10,7 @@ import { resolveSettings, DEFAULT_CONTEXT_SCOPE, DEFAULT_COMPACT_CONTEXT } from 
 import type { SequentialWorkflow, EngineSettings, ContextScope } from "../config/workflow-loader.js";
 import { UsageLedger, formatUsageFooter } from "../state/usage-ledger.js";
 import { compactForThread } from "../utils/handoff.js";
+import { createTracer } from "../tracing/tracer.js";
 
 type StepResult = { label: string; output: string };
 
@@ -116,16 +117,30 @@ export async function runWorkflow(
   ledger?: UsageLedger
 ): Promise<string> {
   const workflow = await getWorkflow(name, workDir);
-  // Resolve engine settings and the usage ledger once at the top level; nested
-  // dispatches reuse them so the cost footer aggregates the whole run (#45, #62).
+  // Resolve engine settings, the usage ledger, and tracing once at the top level;
+  // nested dispatches reuse the ledger so the footer/trace span the whole run
+  // (#45, #62, #67).
   const isTop = ledger === undefined;
   const resolved = settings ?? (await resolveSettings(workDir));
-  const led = ledger ?? new UsageLedger();
 
-  const result = await dispatchPattern(workflow, name, prompt, context, sessionId, client, workDir, resolved, led, signal);
+  // Tracing is best-effort and opt-in: createTracer returns a no-op (no import,
+  // no network) unless langfuse is enabled and configured.
+  const tracer = isTop ? await createTracer(resolved.langfuse) : null;
+  const trace = tracer
+    ? tracer.trace(name, { pattern: workflow.pattern, sessionID: sessionId })
+    : undefined;
+  const led = ledger ?? new UsageLedger(trace);
 
-  // Only the outermost call owns the ledger, so it renders the aggregate footer.
-  return isTop ? result + formatUsageFooter(led) : result;
+  try {
+    const result = await dispatchPattern(workflow, name, prompt, context, sessionId, client, workDir, resolved, led, signal);
+    // Only the outermost call owns the ledger, so it renders the aggregate footer.
+    return isTop ? result + formatUsageFooter(led) : result;
+  } finally {
+    if (tracer && trace) {
+      trace.end();
+      await tracer.flush();
+    }
+  }
 }
 
 async function dispatchPattern(

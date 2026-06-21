@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Optional Langfuse tracing** (#67) — when enabled, each workflow run is emitted as a Langfuse trace and every agent delegation as a generation (model, input, output, token usage, cost, latency). Off by default; enable via `settings.langfuse = { enabled: true, host? }` plus `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` and `npm i langfuse`. Best-effort and zero-overhead when disabled — a missing package, absent keys, or an unreachable backend never breaks a run.
+
 ## [0.2.11] - 2026-06-21
 
 ### Added

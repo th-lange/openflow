@@ -35,9 +35,23 @@ export function extractUsage(info) {
     };
 }
 export class UsageLedger {
+    trace;
     entries = [];
-    record(agent, usage, model) {
+    /** When a trace is attached, each recorded step is also emitted as a generation (#67). */
+    constructor(trace) {
+        this.trace = trace;
+    }
+    record(agent, usage, model, detail) {
         this.entries.push({ agent, model, usage });
+        this.trace?.generation({
+            name: agent,
+            model,
+            input: detail?.input,
+            output: detail?.output,
+            startTime: detail?.startTime,
+            endTime: detail?.endTime,
+            usage: { input: usage.input, output: usage.output, total: usage.input + usage.output, cost: usage.cost },
+        });
     }
     get steps() {
         return this.entries;

@@ -11,6 +11,30 @@ export type UsageStep = {
     model?: string;
     usage: Usage;
 };
+/** Optional per-call detail captured only when a trace is attached (#67). */
+export type GenerationDetail = {
+    input?: string;
+    output?: string;
+    startTime?: Date;
+    endTime?: Date;
+};
+/** Sink the ledger forwards each step to when tracing is enabled (#67). */
+export interface UsageTrace {
+    generation(data: {
+        name: string;
+        model?: string;
+        input?: string;
+        output?: string;
+        usage: {
+            input: number;
+            output: number;
+            total: number;
+            cost: number;
+        };
+        startTime?: Date;
+        endTime?: Date;
+    }): void;
+}
 export declare const ZERO_USAGE: Usage;
 /** Shape of the assistant message metadata we read usage from (subset of the SDK type). */
 type UsageSource = {
@@ -37,8 +61,11 @@ export declare function extractUsage(info: UsageSource | undefined): {
     model?: string;
 };
 export declare class UsageLedger {
+    private readonly trace?;
     private readonly entries;
-    record(agent: string, usage: Usage, model?: string): void;
+    /** When a trace is attached, each recorded step is also emitted as a generation (#67). */
+    constructor(trace?: UsageTrace | undefined);
+    record(agent: string, usage: Usage, model?: string, detail?: GenerationDetail): void;
     get steps(): readonly UsageStep[];
     total(): Usage;
 }

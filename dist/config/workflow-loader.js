@@ -28,6 +28,7 @@ function isPositiveNumber(value) {
  */
 export function mergeSettings(raw) {
     let { agentTimeoutMs, maxConcurrent } = DEFAULT_SETTINGS;
+    let langfuse;
     if (raw !== undefined) {
         if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
             throw new Error('openflow.json "settings" must be an object');
@@ -45,6 +46,7 @@ export function mergeSettings(raw) {
             }
             maxConcurrent = s["maxConcurrent"];
         }
+        langfuse = parseLangfuseSettings(s["langfuse"]);
     }
     const envTimeout = process.env["OPENFLOW_AGENT_TIMEOUT_MS"];
     if (envTimeout) {
@@ -62,7 +64,25 @@ export function mergeSettings(raw) {
         }
         maxConcurrent = n;
     }
-    return { agentTimeoutMs, maxConcurrent };
+    return { agentTimeoutMs, maxConcurrent, ...(langfuse ? { langfuse } : {}) };
+}
+function parseLangfuseSettings(raw) {
+    if (raw === undefined)
+        return undefined;
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        throw new Error('"settings.langfuse" must be an object');
+    }
+    const l = raw;
+    if (l["enabled"] !== undefined && typeof l["enabled"] !== "boolean") {
+        throw new Error('"settings.langfuse.enabled" must be a boolean');
+    }
+    if (l["host"] !== undefined && typeof l["host"] !== "string") {
+        throw new Error('"settings.langfuse.host" must be a string');
+    }
+    return {
+        enabled: l["enabled"] === true,
+        ...(typeof l["host"] === "string" ? { host: l["host"] } : {}),
+    };
 }
 /**
  * Resolve engine settings from `openflow.json` in `directory`, merged with

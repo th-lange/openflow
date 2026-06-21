@@ -96,11 +96,20 @@ export type DebateWorkflow = {
 };
 export type Workflow = SequentialWorkflow | OrchestratorWorkflow | EvaluatorOptimizerWorkflow | ConditionalWorkflow | FanoutWorkflow | ParallelWorkflow | DebateWorkflow;
 export type WorkflowRegistry = Record<string, Workflow>;
+/** Optional Langfuse tracing config (#67). API keys come from the environment. */
+export type LangfuseSettings = {
+    /** Master switch; tracing is off unless this is true. */
+    enabled: boolean;
+    /** Self-hosted Langfuse base URL; falls back to LANGFUSE_HOST then Langfuse cloud. */
+    host?: string;
+};
 export type EngineSettings = {
     /** Per-agent delegation timeout in milliseconds. */
     agentTimeoutMs: number;
     /** Maximum number of agents dispatched concurrently (fan-out/parallel). */
     maxConcurrent: number;
+    /** Langfuse tracing; undefined or { enabled: false } means no tracing. */
+    langfuse?: LangfuseSettings;
 };
 export declare const DEFAULT_SETTINGS: EngineSettings;
 /**
