@@ -3,7 +3,7 @@ import { parseOpenflowBlock } from "../utils/openflow-block.js";
 function transcript(turns) {
     return turns.map((t, i) => `## Turn ${i + 1} — ${t.role}\n${t.content}`).join("\n\n");
 }
-export async function runDebate(workflow, prompt, context, sessionId, client, settings, signal) {
+export async function runDebate(workflow, prompt, context, sessionId, client, settings, ledger, signal) {
     const { proposer, critic, rounds, judge } = workflow;
     const turns = [];
     // --- Proposer: initial case ---
@@ -12,7 +12,7 @@ export async function runDebate(workflow, prompt, context, sessionId, client, se
         prompt: `${prompt}\n\nYou are the proposer. Make your case clearly and persuasively.`,
         context,
         sessionId,
-    }, client, signal, settings.agentTimeoutMs);
+    }, client, signal, settings.agentTimeoutMs, ledger);
     turns.push({ role: "proposer", content: initial });
     // --- Rounds: critic then proposer (until final round) ---
     for (let round = 1; round <= rounds; round++) {
@@ -39,7 +39,7 @@ export async function runDebate(workflow, prompt, context, sessionId, client, se
         prompt: `${prompt}\n\nYou are the proposer. Give your final closing rebuttal. Be concise and decisive.`,
         context: transcript(turns),
         sessionId,
-    }, client, signal, settings.agentTimeoutMs);
+    }, client, signal, settings.agentTimeoutMs, ledger);
     turns.push({ role: "proposer (rebuttal)", content: rebuttal });
     // --- Judge ---
     const judgePrompt = [
@@ -52,7 +52,7 @@ export async function runDebate(workflow, prompt, context, sessionId, client, se
         "```",
         'Valid decisions: "adopt" (accept the proposal), "reject" (reject it), "revise" (accept with modifications).',
     ].join("\n");
-    const { result: judgeOutput } = await delegateTask({ agent: judge, prompt: judgePrompt, context: transcript(turns), sessionId }, client, signal, settings.agentTimeoutMs);
+    const { result: judgeOutput } = await delegateTask({ agent: judge, prompt: judgePrompt, context: transcript(turns), sessionId }, client, signal, settings.agentTimeoutMs, ledger);
     const block = parseOpenflowBlock(judgeOutput);
     const decision = typeof block?.decision === "string" ? block.decision : "(no decision)";
     return [

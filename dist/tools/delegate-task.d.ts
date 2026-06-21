@@ -1,5 +1,6 @@
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { z } from "zod";
+import { type Usage, type UsageLedger } from "../state/usage-ledger.js";
 export declare const DelegateTaskInputSchema: z.ZodObject<{
     agent: z.ZodString;
     prompt: z.ZodString;
@@ -11,6 +12,10 @@ export type DelegateTaskOutput = {
     result: string;
     childSessionId: string;
     stepIndex?: number;
+    /** Token/cost for this agent call; zeroed when the provider reports nothing (#62). */
+    usage: Usage;
+    /** Model that served the call, when the provider reports it. */
+    model?: string;
 };
 /**
  * Delegate a task to a named agent in a child session.
@@ -21,5 +26,5 @@ export type DelegateTaskOutput = {
  * per-agent timeout is configurable via the `settings` block in openflow.json
  * (#45); it defaults to TIMEOUT_MS when not supplied.
  */
-export declare function delegateTask(input: DelegateTaskInput, client: OpencodeClient, signal?: AbortSignal, timeoutMs?: number): Promise<DelegateTaskOutput>;
+export declare function delegateTask(input: DelegateTaskInput, client: OpencodeClient, signal?: AbortSignal, timeoutMs?: number, ledger?: UsageLedger): Promise<DelegateTaskOutput>;
 //# sourceMappingURL=delegate-task.d.ts.map

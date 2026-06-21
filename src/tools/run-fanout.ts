@@ -3,6 +3,7 @@ import { delegateTask } from "./delegate-task.js";
 import { parallelDispatch } from "./parallel-dispatch.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
 import type { FanoutWorkflow, EngineSettings } from "../config/workflow-loader.js";
+import type { UsageLedger } from "../state/usage-ledger.js";
 
 export async function runFanout(
   workflow: FanoutWorkflow,
@@ -11,6 +12,7 @@ export async function runFanout(
   sessionId: string | undefined,
   client: OpencodeClient,
   settings: EngineSettings,
+  ledger: UsageLedger,
   signal?: AbortSignal
 ): Promise<string> {
   const { agents, picker, pickerPrompt } = workflow;
@@ -19,6 +21,7 @@ export async function runFanout(
   const results = await parallelDispatch(tasks, client, signal, {
     maxConcurrent: settings.maxConcurrent,
     timeoutMs: settings.agentTimeoutMs,
+    ledger,
   });
 
   const successful = results.filter((r) => !r.error);
@@ -53,7 +56,8 @@ export async function runFanout(
     { agent: picker, prompt: pickerInstruction, context: candidatesContext, sessionId },
     client,
     signal,
-    settings.agentTimeoutMs
+    settings.agentTimeoutMs,
+    ledger
   );
 
   const block = parseOpenflowBlock(pickerOutput);

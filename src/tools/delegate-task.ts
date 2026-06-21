@@ -2,6 +2,7 @@ import { type OpencodeClient, type TextPart } from "@opencode-ai/sdk";
 import { z } from "zod";
 import { assertAgentExists } from "../config/agent-registry.js";
 import { stepStore } from "../state/step-store.js";
+import { extractUsage, type Usage, type UsageLedger } from "../state/usage-ledger.js";
 
 // ── Types (#10) ──────────────────────────────────────────────────────────────
 
@@ -18,6 +19,10 @@ export type DelegateTaskOutput = {
   result: string;
   childSessionId: string;
   stepIndex?: number;
+  /** Token/cost for this agent call; zeroed when the provider reports nothing (#62). */
+  usage: Usage;
+  /** Model that served the call, when the provider reports it. */
+  model?: string;
 };
 
 // ── Handler (#11 + #12) ──────────────────────────────────────────────────────
@@ -37,7 +42,8 @@ export async function delegateTask(
   input: DelegateTaskInput,
   client: OpencodeClient,
   signal?: AbortSignal,
-  timeoutMs: number = TIMEOUT_MS
+  timeoutMs: number = TIMEOUT_MS,
+  ledger?: UsageLedger
 ): Promise<DelegateTaskOutput> {
   const { agent, prompt, context, sessionId } = DelegateTaskInputSchema.parse(input);
 
@@ -65,6 +71,8 @@ export async function delegateTask(
   // The losing racers (timeout timer, abort listener) are torn down once the
   // race settles so they don't keep the event loop alive (#45).
   let result: string;
+  let usage: Usage = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+  let model: string | undefined;
   const cleanups: Array<() => void> = [];
   try {
     const promptPromise = client.session.prompt({
@@ -92,6 +100,9 @@ export async function delegateTask(
     );
     result = textParts.map((p) => p.text).join("").trim();
     if (!result) result = "(no text response)";
+
+    // Capture token/cost from the assistant message; absent fields default to 0 (#62)
+    ({ usage, model } = extractUsage(promptResult.data!.info));
   } catch (e) {
     // Always clean up the child session on error (#12: no session leaks)
     await client.session.delete({ path: { id: childSessionId } }).catch(() => {});
@@ -111,10 +122,13 @@ export async function delegateTask(
     }
   }
 
+  // Accumulate usage for the run-level cost footer (#62)
+  ledger?.record(agent, usage, model);
+
   // Clean up child session
   await client.session.delete({ path: { id: childSessionId } }).catch(() => {});
 
-  return { result, childSessionId, stepIndex };
+  return { result, childSessionId, stepIndex, usage, model };
 }
 
 function rejectAfter(ms: number, message: string, cleanups: Array<() => void>): Promise<never> {

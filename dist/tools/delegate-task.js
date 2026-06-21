@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { assertAgentExists } from "../config/agent-registry.js";
 import { stepStore } from "../state/step-store.js";
+import { extractUsage } from "../state/usage-ledger.js";
 // ── Types (#10) ──────────────────────────────────────────────────────────────
 export const DelegateTaskInputSchema = z.object({
     agent: z.string().describe("Name of the agent to delegate to"),
@@ -19,7 +20,7 @@ const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  * per-agent timeout is configurable via the `settings` block in openflow.json
  * (#45); it defaults to TIMEOUT_MS when not supplied.
  */
-export async function delegateTask(input, client, signal, timeoutMs = TIMEOUT_MS) {
+export async function delegateTask(input, client, signal, timeoutMs = TIMEOUT_MS, ledger) {
     const { agent, prompt, context, sessionId } = DelegateTaskInputSchema.parse(input);
     // Validate the agent exists before spawning anything (#12: fail fast)
     await assertAgentExists(client, agent);
@@ -43,6 +44,8 @@ export async function delegateTask(input, client, signal, timeoutMs = TIMEOUT_MS
     // The losing racers (timeout timer, abort listener) are torn down once the
     // race settles so they don't keep the event loop alive (#45).
     let result;
+    let usage = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+    let model;
     const cleanups = [];
     try {
         const promptPromise = client.session.prompt({
@@ -66,6 +69,8 @@ export async function delegateTask(input, client, signal, timeoutMs = TIMEOUT_MS
         result = textParts.map((p) => p.text).join("").trim();
         if (!result)
             result = "(no text response)";
+        // Capture token/cost from the assistant message; absent fields default to 0 (#62)
+        ({ usage, model } = extractUsage(promptResult.data.info));
     }
     catch (e) {
         // Always clean up the child session on error (#12: no session leaks)
@@ -86,9 +91,11 @@ export async function delegateTask(input, client, signal, timeoutMs = TIMEOUT_MS
             stepStore.recordStep(sessionId, agent, summary);
         }
     }
+    // Accumulate usage for the run-level cost footer (#62)
+    ledger?.record(agent, usage, model);
     // Clean up child session
     await client.session.delete({ path: { id: childSessionId } }).catch(() => { });
-    return { result, childSessionId, stepIndex };
+    return { result, childSessionId, stepIndex, usage, model };
 }
 function rejectAfter(ms, message, cleanups) {
     return new Promise((_, reject) => {

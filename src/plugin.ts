@@ -12,6 +12,7 @@ import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "./
 import { listAgents } from "./config/agent-registry.js";
 import { runWorkflow } from "./tools/run-workflow.js";
 import { loadWorkflows, resolveSettings } from "./config/workflow-loader.js";
+import { UsageLedger, formatUsageFooter } from "./state/usage-ledger.js";
 import { createWorkflowArgs, createAgentArgs } from "./tools/schemas.js";
 
 // Native OpenCode plugin entrypoint (ADR 0001 / #39).
@@ -103,13 +104,15 @@ export const openflow: Plugin = async ({ client, directory }: PluginInput): Prom
         },
         async execute({ agent, prompt, context }, ctx) {
           const settings = await resolveSettings(ctx.directory);
+          const ledger = new UsageLedger();
           const { result } = await delegateTask(
             { agent, prompt, context, sessionId: ctx.sessionID },
             client,
             ctx.abort,
-            settings.agentTimeoutMs
+            settings.agentTimeoutMs,
+            ledger
           );
-          return result;
+          return result + formatUsageFooter(ledger);
         },
       }),
 

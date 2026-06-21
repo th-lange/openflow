@@ -8,7 +8,7 @@ export async function parallelDispatch(tasks, client, signal, options) {
         const batchResults = await Promise.all(batch.map(async (task, batchIdx) => {
             const index = start + batchIdx;
             try {
-                const { result } = await delegateTask(task, client, signal, options?.timeoutMs);
+                const { result } = await delegateTask(task, client, signal, options?.timeoutMs, options?.ledger);
                 return { index, agent: task.agent, output: result };
             }
             catch (e) {
