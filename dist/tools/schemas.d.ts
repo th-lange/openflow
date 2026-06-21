@@ -23,6 +23,11 @@ export declare const createWorkflowArgs: {
         checkpoint: z.ZodString;
     }, z.core.$strip>]>>>;
     commanderMayAlsoUse: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    contextScope: z.ZodOptional<z.ZodEnum<{
+        all: "all";
+        last: "last";
+        none: "none";
+    }>>;
     agents: z.ZodOptional<z.ZodArray<z.ZodString>>;
     satisfactionCriteria: z.ZodOptional<z.ZodString>;
     maxIterations: z.ZodOptional<z.ZodNumber>;

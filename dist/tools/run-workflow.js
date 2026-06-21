@@ -5,7 +5,7 @@ import { runConditional } from "./run-conditional.js";
 import { runFanout } from "./run-fanout.js";
 import { runParallel } from "./run-parallel.js";
 import { runDebate } from "./run-debate.js";
-import { resolveSettings } from "../config/workflow-loader.js";
+import { resolveSettings, DEFAULT_CONTEXT_SCOPE } from "../config/workflow-loader.js";
 import { UsageLedger, formatUsageFooter } from "../state/usage-ledger.js";
 function stepLabel(step) {
     if (typeof step === "string")
@@ -14,10 +14,29 @@ function stepLabel(step) {
         return `[${step.workflow}]`;
     return "[checkpoint]";
 }
+/**
+ * Build the context threaded into the next step from the prior step results,
+ * honouring the workflow's contextScope (#63). `all` threads every prior result,
+ * `last` only the most recent, `none` threads nothing. Step numbering reflects
+ * each result's true position so labels stay stable across scopes.
+ */
+function threadedContext(scope, stepResults) {
+    if (scope === "none" || stepResults.length === 0)
+        return "";
+    const indices = scope === "last" ? [stepResults.length - 1] : stepResults.map((_, i) => i);
+    return [
+        "## Prior step results",
+        "",
+        ...indices.map((i) => `### Step ${i + 1} — ${stepResults[i].label}\n${stepResults[i].output}`),
+    ].join("\n");
+}
 // ── Sequential ────────────────────────────────────────────────────────────────
 export async function runSequential(workflow, prompt, initialContext, sessionId, client, workDir, dispatch, settings, ledger, signal) {
     const { sequence } = workflow;
+    const scope = workflow.contextScope ?? DEFAULT_CONTEXT_SCOPE;
     const stepResults = [];
+    // Step 1 sees the context entering the workflow; subsequent steps see prior
+    // step outputs as governed by contextScope (#63).
     let context = initialContext ?? "";
     for (const step of sequence) {
         let output;
@@ -34,11 +53,7 @@ export async function runSequential(workflow, prompt, initialContext, sessionId,
                 "The commander must handle this workflow step-by-step.");
         }
         stepResults.push({ label: stepLabel(step), output });
-        context = [
-            "## Prior step results",
-            "",
-            ...stepResults.map(({ label, output }, idx) => `### Step ${idx + 1} — ${label}\n${output}`),
-        ].join("\n");
+        context = threadedContext(scope, stepResults);
     }
     const total = sequence.length;
     const header = `Workflow complete ✅ (${sequence.map(stepLabel).join(" → ")})`;

@@ -37,6 +37,7 @@ export type CreateWorkflowInput = {
   // sequential
   sequence?: SequenceStepInput[];
   commanderMayAlsoUse?: string[];
+  contextScope?: "all" | "last" | "none";
   // orchestrator / fanout
   agents?: string[];
   satisfactionCriteria?: string;
@@ -79,6 +80,7 @@ function buildEntry(input: CreateWorkflowInput): Record<string, unknown> {
       base["commanderMayAlsoUse"] =
         input.commanderMayAlsoUse ??
         (input.sequence ?? []).filter((s): s is string => typeof s === "string");
+      pick("contextScope");
       break;
     case "orchestrator":
       pick("agents", "satisfactionCriteria", "maxIterations");

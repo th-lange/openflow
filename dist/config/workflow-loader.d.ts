@@ -4,6 +4,17 @@ export type SequenceStep = string | {
 } | {
     workflow: string;
 };
+/**
+ * How much prior-step output a sequential workflow threads into each subsequent
+ * step (#63). Threading every prior step's full output is O(n²) in tokens; this
+ * lets a workflow trade context completeness for cost.
+ * - `all`  — every prior step's output (default; current behavior)
+ * - `last` — only the immediately preceding step's output
+ * - `none` — no prior-step context (each step sees only the prompt)
+ */
+export type ContextScope = "all" | "last" | "none";
+export declare const CONTEXT_SCOPES: readonly ContextScope[];
+export declare const DEFAULT_CONTEXT_SCOPE: ContextScope;
 export type SequentialWorkflow = {
     pattern: "sequential";
     description?: string;
@@ -11,6 +22,7 @@ export type SequentialWorkflow = {
     locked?: boolean;
     sequence: SequenceStep[];
     commanderMayAlsoUse: string[];
+    contextScope?: ContextScope;
 };
 export type OrchestratorWorkflow = {
     pattern: "orchestrator";

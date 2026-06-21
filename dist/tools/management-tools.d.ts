@@ -13,6 +13,7 @@ export type CreateWorkflowInput = {
     pattern?: Workflow["pattern"];
     sequence?: SequenceStepInput[];
     commanderMayAlsoUse?: string[];
+    contextScope?: "all" | "last" | "none";
     agents?: string[];
     satisfactionCriteria?: string;
     maxIterations?: number;

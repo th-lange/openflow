@@ -8,6 +8,19 @@ import { assertAgentExists } from "./agent-registry.js";
 
 export type SequenceStep = string | { checkpoint: string } | { workflow: string };
 
+/**
+ * How much prior-step output a sequential workflow threads into each subsequent
+ * step (#63). Threading every prior step's full output is O(n²) in tokens; this
+ * lets a workflow trade context completeness for cost.
+ * - `all`  — every prior step's output (default; current behavior)
+ * - `last` — only the immediately preceding step's output
+ * - `none` — no prior-step context (each step sees only the prompt)
+ */
+export type ContextScope = "all" | "last" | "none";
+
+export const CONTEXT_SCOPES: readonly ContextScope[] = ["all", "last", "none"];
+export const DEFAULT_CONTEXT_SCOPE: ContextScope = "all";
+
 export type SequentialWorkflow = {
   pattern: "sequential";
   description?: string;
@@ -15,6 +28,7 @@ export type SequentialWorkflow = {
   locked?: boolean;
   sequence: SequenceStep[];
   commanderMayAlsoUse: string[];
+  contextScope?: ContextScope;
 };
 
 export type OrchestratorWorkflow = {
@@ -440,11 +454,19 @@ function validateSequentialWorkflow(name: string, w: Record<string, unknown>): S
     }
   }
 
+  const contextScope = w["contextScope"];
+  if (contextScope !== undefined && !CONTEXT_SCOPES.includes(contextScope as ContextScope)) {
+    throw new Error(
+      `Workflow "${name}": "contextScope" must be one of ${CONTEXT_SCOPES.join(", ")}`
+    );
+  }
+
   return {
     pattern: "sequential",
     description: typeof w["description"] === "string" ? w["description"] : undefined,
     sequence,
     commanderMayAlsoUse: Array.isArray(mayAlsoUse) ? (mayAlsoUse as string[]) : [],
+    ...(contextScope !== undefined ? { contextScope: contextScope as ContextScope } : {}),
   };
 }
 
