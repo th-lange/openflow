@@ -7,6 +7,7 @@ Authoring your own workflows and agents, plus the full configuration reference.
 - [Authoring workflows](#authoring-workflows)
 - [`openflow.json` structure](#openflowjson-structure)
 - [Engine settings](#engine-settings)
+- [Token efficiency](#token-efficiency)
 - [Workflow patterns](#workflow-patterns)
 - [Workflow composition](#workflow-composition)
 - [Pattern options reference](#pattern-options-reference)
@@ -140,6 +141,39 @@ Tracing is **off by default**. To enable it:
 `host` is optional (falls back to `LANGFUSE_HOST`, then Langfuse cloud) — set it to your own URL for self-hosted Langfuse. Tracing is best-effort: if the package is missing, the keys are unset, or the backend is unreachable, the run proceeds normally and tracing silently no-ops.
 
 > Tracing sends prompts and outputs to Langfuse. Keep it disabled for sensitive work, or self-host via `host`.
+
+## Token efficiency
+
+Most of a workflow's cost is tokens, and openflow gives you several levers to cut them without sacrificing quality. They compose — measure first with the footer, then dial in the rest.
+
+### The cost footer
+
+Every workflow run ends with a one-line footer aggregating token usage and cost across all steps (including nested patterns):
+
+```
+---
+tokens: 12.3k in / 4.1k out · cache 82% read · ~$0.0412 · 5 steps
+```
+
+- **in / out** — total input and output tokens for the run.
+- **cache N% read** — share of input served from the provider's prompt cache (higher is cheaper). Shown only when the provider reports cache reads.
+- **~$** — total cost across steps, when the provider reports it.
+- **steps** — number of agent delegations.
+
+`delegate_task` shows the same footer for a single call. Use it to find the expensive steps before tuning.
+
+### The levers
+
+| Lever | What it does | Where |
+|-------|--------------|-------|
+| **Model routing** | Route easy work to a cheap model and reserve a strong model for hard tasks. `complexity-gate` classifies; `coder-weak` (haiku) / `coder` / `coder-strong` (opus) execute by tier — see `smart-implement` in [Usage](./usage.md#sample-workflows). | Agent `model` field + conditional/`complexity-gate` workflows |
+| **`contextScope`** | Limit how many prior steps are threaded into each step (`all` / `last` / `none`). Cuts the O(n²) context growth on long sequences. | [Sequential](#sequential) field |
+| **Structured handoffs (`compactContext`)** | Thread a compact handoff block between steps instead of the full transcript; downstream agents re-read files themselves. On by default. | [Structured handoffs](#structured-handoffs) |
+| **Langfuse tracing** | Persist per-step token/cost/latency to dashboards for ongoing analysis. | [Tracing (Langfuse)](#tracing-langfuse) |
+
+### Compatibility note
+
+Since **v0.2.11**, compact context is the **default** for sequential workflows (`compactContext: true`): intermediate-step context and the relay use handoff blocks rather than full outputs. This reduces cost but changes what downstream steps see. To restore the previous full-output behaviour for a workflow, set `compactContext: false`.
 
 ## Workflow patterns
 

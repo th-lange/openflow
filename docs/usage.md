@@ -19,6 +19,8 @@ It should return null instead.
 
 The commander runs code-driven patterns via `run_workflow` — fan-out and parallel branches execute concurrently, and iteration/round limits are enforced in code, not left to the model.
 
+Each run ends with a one-line cost footer (`tokens: … in / … out · cache …% read · ~$… · N steps`) summing token usage and cost across every step. See [Token efficiency](./extension.md#token-efficiency) for what the numbers mean and how to lower them.
+
 ## List available workflows
 
 ```
