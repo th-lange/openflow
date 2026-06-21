@@ -9,8 +9,9 @@ import {
   isValidWorkflow,
 } from "./tools/workflow-tools.js";
 import { createWorkflow, createAgent, enableWorkflow, disableWorkflow } from "./tools/management-tools.js";
-import { listAgents } from "./config/agent-registry.js";
+import { listAgents, formatModel, agentModelLabel } from "./config/agent-registry.js";
 import { runWorkflow } from "./tools/run-workflow.js";
+import { titleSession } from "./tools/session-title.js";
 import { loadWorkflows, resolveSettings } from "./config/workflow-loader.js";
 import { UsageLedger, formatUsageFooter } from "./state/usage-ledger.js";
 import { createWorkflowArgs, createAgentArgs } from "./tools/schemas.js";
@@ -76,7 +77,10 @@ export const openflow: Plugin = async ({ client, directory }: PluginInput): Prom
           const agents = await listAgents(client, mode);
           if (agents.length === 0) return "No agents found.";
           return agents
-            .map((a) => `- ${a.name} (${a.mode})${a.description ? `: ${a.description}` : ""}`)
+            .map((a) => {
+              const model = formatModel(a.model);
+              return `- ${a.name} (${a.mode})${model ? ` [${model}]` : ""}${a.description ? `: ${a.description}` : ""}`;
+            })
             .join("\n");
         },
       }),
@@ -90,6 +94,8 @@ export const openflow: Plugin = async ({ client, directory }: PluginInput): Prom
           context: z.string().optional().describe("Prior context to prepend to step 1"),
         },
         async execute({ name, prompt, context }, ctx) {
+          // Best-effort breadcrumb: title the session after the workflow (#60).
+          await titleSession(client, ctx.sessionID, name);
           return await runWorkflow(name, prompt, context, ctx.sessionID, client, ctx.directory, ctx.abort);
         },
       }),
@@ -105,6 +111,7 @@ export const openflow: Plugin = async ({ client, directory }: PluginInput): Prom
         async execute({ agent, prompt, context }, ctx) {
           const settings = await resolveSettings(ctx.directory);
           const ledger = new UsageLedger();
+          const model = await agentModelLabel(client, agent);
           const { result } = await delegateTask(
             { agent, prompt, context, sessionId: ctx.sessionID },
             client,
@@ -112,7 +119,8 @@ export const openflow: Plugin = async ({ client, directory }: PluginInput): Prom
             settings.agentTimeoutMs,
             ledger
           );
-          return result + formatUsageFooter(ledger);
+          const header = `**${agent}**${model ? ` (${model})` : ""}`;
+          return `${header}\n\n${result}${formatUsageFooter(ledger)}`;
         },
       }),
 

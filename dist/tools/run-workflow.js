@@ -9,6 +9,7 @@ import { resolveSettings, DEFAULT_CONTEXT_SCOPE, DEFAULT_COMPACT_CONTEXT } from 
 import { UsageLedger, formatUsageFooter } from "../state/usage-ledger.js";
 import { compactForThread } from "../utils/handoff.js";
 import { createTracer } from "../tracing/tracer.js";
+import { getAgentRegistry, formatModel } from "../config/agent-registry.js";
 function stepLabel(step) {
     if (typeof step === "string")
         return step;
@@ -43,6 +44,9 @@ export async function runSequential(workflow, prompt, initialContext, sessionId,
     const { sequence } = workflow;
     const scope = workflow.contextScope ?? DEFAULT_CONTEXT_SCOPE;
     const compact = workflow.compactContext ?? DEFAULT_COMPACT_CONTEXT;
+    // Registry lookup so relay headers can show which model handled each step (#60).
+    const registry = await getAgentRegistry(client);
+    const modelOf = (agent) => agent ? formatModel(registry.find((a) => a.name === agent)?.model) : undefined;
     const stepResults = [];
     // Step 1 sees the context entering the workflow; subsequent steps see prior
     // step outputs as governed by contextScope (#63) and handoff compaction (#64).
@@ -61,7 +65,11 @@ export async function runSequential(workflow, prompt, initialContext, sessionId,
             throw new Error("Checkpoint steps cannot be executed via run_workflow. " +
                 "The commander must handle this workflow step-by-step.");
         }
-        stepResults.push({ label: stepLabel(step), output });
+        stepResults.push({
+            label: stepLabel(step),
+            output,
+            agent: typeof step === "string" ? step : undefined,
+        });
         context = threadedContext(scope, stepResults, compact);
     }
     const total = sequence.length;
@@ -71,11 +79,14 @@ export async function runSequential(workflow, prompt, initialContext, sessionId,
     return [
         header,
         "",
-        ...stepResults.flatMap(({ label, output }, idx) => [
-            `## Step ${idx + 1}/${total} — ${label}`,
-            compact && idx < total - 1 ? stepView(output, true) : output,
-            "",
-        ]),
+        ...stepResults.flatMap(({ label, output, agent }, idx) => {
+            const model = modelOf(agent);
+            return [
+                `## Step ${idx + 1}/${total} — ${label}${model ? ` (${model})` : ""}`,
+                compact && idx < total - 1 ? stepView(output, true) : output,
+                "",
+            ];
+        }),
     ].join("\n");
 }
 // ── Dispatcher ────────────────────────────────────────────────────────────────

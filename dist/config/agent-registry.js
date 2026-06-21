@@ -9,8 +9,18 @@ export async function getAgentRegistry(client) {
         name: a.name,
         description: a.description,
         mode: a.mode,
+        ...(a.model ? { model: { providerID: a.model.providerID, modelID: a.model.modelID } } : {}),
     }));
     return cache;
+}
+/** Render a model as `providerID/modelID`, or undefined when no model is set. */
+export function formatModel(model) {
+    return model ? `${model.providerID}/${model.modelID}` : undefined;
+}
+/** The `providerID/modelID` label for a named agent, or undefined (default model / unknown). */
+export async function agentModelLabel(client, name) {
+    const registry = await getAgentRegistry(client);
+    return formatModel(registry.find((a) => a.name === name)?.model);
 }
 /** List agents, optionally filtered by mode. Read-only (backs the list_agents tool). */
 export async function listAgents(client, mode) {

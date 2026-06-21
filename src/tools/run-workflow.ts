@@ -11,8 +11,9 @@ import type { SequentialWorkflow, EngineSettings, ContextScope } from "../config
 import { UsageLedger, formatUsageFooter } from "../state/usage-ledger.js";
 import { compactForThread } from "../utils/handoff.js";
 import { createTracer } from "../tracing/tracer.js";
+import { getAgentRegistry, formatModel } from "../config/agent-registry.js";
 
-type StepResult = { label: string; output: string };
+type StepResult = { label: string; output: string; agent?: string };
 
 function stepLabel(step: SequentialWorkflow["sequence"][number]): string {
   if (typeof step === "string") return step;
@@ -63,6 +64,10 @@ export async function runSequential(
   const { sequence } = workflow;
   const scope = workflow.contextScope ?? DEFAULT_CONTEXT_SCOPE;
   const compact = workflow.compactContext ?? DEFAULT_COMPACT_CONTEXT;
+  // Registry lookup so relay headers can show which model handled each step (#60).
+  const registry = await getAgentRegistry(client);
+  const modelOf = (agent?: string): string | undefined =>
+    agent ? formatModel(registry.find((a) => a.name === agent)?.model) : undefined;
   const stepResults: StepResult[] = [];
   // Step 1 sees the context entering the workflow; subsequent steps see prior
   // step outputs as governed by contextScope (#63) and handoff compaction (#64).
@@ -84,7 +89,11 @@ export async function runSequential(
       );
     }
 
-    stepResults.push({ label: stepLabel(step), output });
+    stepResults.push({
+      label: stepLabel(step),
+      output,
+      agent: typeof step === "string" ? step : undefined,
+    });
     context = threadedContext(scope, stepResults, compact);
   }
 
@@ -95,11 +104,14 @@ export async function runSequential(
   return [
     header,
     "",
-    ...stepResults.flatMap(({ label, output }, idx) => [
-      `## Step ${idx + 1}/${total} — ${label}`,
-      compact && idx < total - 1 ? stepView(output, true) : output,
-      "",
-    ]),
+    ...stepResults.flatMap(({ label, output, agent }, idx) => {
+      const model = modelOf(agent);
+      return [
+        `## Step ${idx + 1}/${total} — ${label}${model ? ` (${model})` : ""}`,
+        compact && idx < total - 1 ? stepView(output, true) : output,
+        "",
+      ];
+    }),
   ].join("\n");
 }
 
