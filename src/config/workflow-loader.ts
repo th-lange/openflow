@@ -21,6 +21,15 @@ export type ContextScope = "all" | "last" | "none";
 export const CONTEXT_SCOPES: readonly ContextScope[] = ["all", "last", "none"];
 export const DEFAULT_CONTEXT_SCOPE: ContextScope = "all";
 
+/**
+ * Whether a sequential workflow threads compact structured handoffs between
+ * steps (the default) instead of full step outputs (#64). When `true`, each
+ * step's `\`\`\`handoff` block — or a truncated fallback — is threaded and shown
+ * in the relay for intermediate steps; the final step is always shown in full.
+ * Set `false` to restore full-output threading and relay (pre-#64 behaviour).
+ */
+export const DEFAULT_COMPACT_CONTEXT = true;
+
 export type SequentialWorkflow = {
   pattern: "sequential";
   description?: string;
@@ -29,6 +38,7 @@ export type SequentialWorkflow = {
   sequence: SequenceStep[];
   commanderMayAlsoUse: string[];
   contextScope?: ContextScope;
+  compactContext?: boolean;
 };
 
 export type OrchestratorWorkflow = {
@@ -461,12 +471,18 @@ function validateSequentialWorkflow(name: string, w: Record<string, unknown>): S
     );
   }
 
+  const compactContext = w["compactContext"];
+  if (compactContext !== undefined && typeof compactContext !== "boolean") {
+    throw new Error(`Workflow "${name}": "compactContext" must be a boolean`);
+  }
+
   return {
     pattern: "sequential",
     description: typeof w["description"] === "string" ? w["description"] : undefined,
     sequence,
     commanderMayAlsoUse: Array.isArray(mayAlsoUse) ? (mayAlsoUse as string[]) : [],
     ...(contextScope !== undefined ? { contextScope: contextScope as ContextScope } : {}),
+    ...(compactContext !== undefined ? { compactContext } : {}),
   };
 }
 

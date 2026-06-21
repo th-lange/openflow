@@ -44,6 +44,14 @@ Always produce a structured findings report:
 - [ ] {criterion 1}: {met / not met — reason}
 ---
 
+Then end with a fenced `handoff` block summarising the verdict for any following step (the engine threads only this block):
+
+```handoff
+**Verdict:** {PASS | PASS WITH WARNINGS | FAIL}
+**Blockers:** {count + one line each, or "none"}
+**Must fix:** {the changes required before this can ship, or "none"}
+```
+
 ## Severity definitions
 
 - **blocker**: incorrect, insecure, or fails an acceptance criterion. Must fix before shipping.

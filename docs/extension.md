@@ -178,6 +178,7 @@ Rules:
 | `sequence` | yes | — | Ordered steps. Each is an agent name, `{ "workflow": "name" }`, or `{ "checkpoint": "message" }` |
 | `commanderMayAlsoUse` | no | `[]` | Agents the commander may deviate to when a step fails |
 | `contextScope` | no | `all` | How much prior-step output is threaded into each step: `all` (every prior step), `last` (previous step only), or `none` (no prior-step context). Lower scopes cut token cost on long sequences |
+| `compactContext` | no | `true` | Thread compact **handoff** blocks between steps (and show intermediate steps as their handoff in the relay; the final step is always shown in full). Set `false` for full-output threading. See [Structured handoffs](#structured-handoffs) |
 | `description` | no | — | Shown in `list_workflows` |
 | `disabled` | no | `false` | Hide from listing and block execution |
 
@@ -188,6 +189,20 @@ Rules:
 | Agent name | `"coder"` | Delegates to that agent |
 | Workflow reference | `{ "workflow": "implement" }` | Executes the named workflow inline |
 | Checkpoint | `{ "checkpoint": "Review before continuing." }` | Pauses and prompts the user to confirm before proceeding |
+
+#### Structured handoffs
+
+By default (`compactContext: true`), sequential workflows thread a compact **handoff** between steps rather than each step's full transcript. An agent ends its response with a fenced block:
+
+````
+```handoff
+**Files changed:** `src/utils/date.ts` — return null on empty input
+**What was done:** guarded the parse and added the early return
+**Risks to check:** callers that relied on the throw
+```
+````
+
+The engine threads only that block to the next step; the downstream agent re-reads the named files via its own tools instead of receiving them inline. This keeps long pipelines from re-sending every prior step's output (the O(n²) cost). If an agent emits no block, its output is threaded truncated as a fallback. The built-in `composer`, `coder`, `coder-strong`, `coder-weak`, and `analyzer` agents all emit handoff blocks; custom agents should too. Set `compactContext: false` to restore full-output threading and a full relay.
 
 ### Orchestrator
 

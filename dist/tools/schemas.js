@@ -19,6 +19,7 @@ export const createWorkflowArgs = {
     sequence: z.array(sequenceStepSchema).optional().describe("sequential: ordered steps — agent name, { workflow }, or { checkpoint }"),
     commanderMayAlsoUse: z.array(z.string()).optional().describe("sequential: agents the commander may deviate to (defaults to the sequence's agents)"),
     contextScope: z.enum(["all", "last", "none"]).optional().describe("sequential: how much prior-step output to thread into each step — all (default), last (previous step only), or none"),
+    compactContext: z.boolean().optional().describe("sequential: thread compact handoff blocks between steps and in the relay (default true); set false for full-output threading"),
     // orchestrator / fanout
     agents: z.array(z.string()).optional().describe("orchestrator/fanout: agent pool"),
     satisfactionCriteria: z.string().optional().describe("orchestrator: stop condition"),

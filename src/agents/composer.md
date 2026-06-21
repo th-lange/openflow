@@ -16,9 +16,9 @@ You do not write code, edit files, or run commands. Your only output is a well-s
 
 ## Output format
 
-Always end your response with a brief in this exact structure:
+Always end your response with the brief inside a fenced `handoff` block, in this exact structure. The engine threads this block — and nothing else — to the next agent, so it must be self-contained:
 
----
+```handoff
 ## Task brief
 
 **Problem:** {1–3 sentence problem statement}
@@ -33,7 +33,7 @@ Always end your response with a brief in this exact structure:
 
 **Assumptions:**
 - {anything you inferred that the coder should know}
----
+```
 
 ## How to produce the brief
 

@@ -58,4 +58,16 @@ describe("generated agents", () => {
     assert.ok(builder.prompt.includes("Workflow Builder"), "prompt body not generated");
     assert.equal(config.command["build-workflow"].agent, "workflow-builder");
   });
+
+  it("pipeline agents emit a fenced handoff block (#64)", async () => {
+    const root = resolve(import.meta.dirname, "../..");
+    const config = JSON.parse(await readFile(resolve(root, "opencode.json"), "utf-8"));
+    for (const name of ["composer", "coder", "coder-strong", "coder-weak", "analyzer"]) {
+      assert.match(
+        config.agent[name].prompt,
+        /```handoff/,
+        `${name} prompt must instruct a fenced handoff block`
+      );
+    }
+  });
 });

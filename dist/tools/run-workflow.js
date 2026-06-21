@@ -5,8 +5,9 @@ import { runConditional } from "./run-conditional.js";
 import { runFanout } from "./run-fanout.js";
 import { runParallel } from "./run-parallel.js";
 import { runDebate } from "./run-debate.js";
-import { resolveSettings, DEFAULT_CONTEXT_SCOPE } from "../config/workflow-loader.js";
+import { resolveSettings, DEFAULT_CONTEXT_SCOPE, DEFAULT_COMPACT_CONTEXT } from "../config/workflow-loader.js";
 import { UsageLedger, formatUsageFooter } from "../state/usage-ledger.js";
+import { compactForThread } from "../utils/handoff.js";
 function stepLabel(step) {
     if (typeof step === "string")
         return step;
@@ -14,29 +15,36 @@ function stepLabel(step) {
         return `[${step.workflow}]`;
     return "[checkpoint]";
 }
+/** A step's output as threaded/relayed: its handoff block when compacting, else full. */
+function stepView(output, compact) {
+    return compact ? compactForThread(output) : output;
+}
 /**
  * Build the context threaded into the next step from the prior step results,
- * honouring the workflow's contextScope (#63). `all` threads every prior result,
- * `last` only the most recent, `none` threads nothing. Step numbering reflects
- * each result's true position so labels stay stable across scopes.
+ * honouring the workflow's contextScope (#63) and handoff compaction (#64).
+ * `all` threads every prior result, `last` only the most recent, `none` nothing.
+ * When `compact`, each result is reduced to its handoff block (or a truncated
+ * fallback). Step numbering reflects each result's true position so labels stay
+ * stable across scopes.
  */
-function threadedContext(scope, stepResults) {
+function threadedContext(scope, stepResults, compact) {
     if (scope === "none" || stepResults.length === 0)
         return "";
     const indices = scope === "last" ? [stepResults.length - 1] : stepResults.map((_, i) => i);
     return [
         "## Prior step results",
         "",
-        ...indices.map((i) => `### Step ${i + 1} — ${stepResults[i].label}\n${stepResults[i].output}`),
+        ...indices.map((i) => `### Step ${i + 1} — ${stepResults[i].label}\n${stepView(stepResults[i].output, compact)}`),
     ].join("\n");
 }
 // ── Sequential ────────────────────────────────────────────────────────────────
 export async function runSequential(workflow, prompt, initialContext, sessionId, client, workDir, dispatch, settings, ledger, signal) {
     const { sequence } = workflow;
     const scope = workflow.contextScope ?? DEFAULT_CONTEXT_SCOPE;
+    const compact = workflow.compactContext ?? DEFAULT_COMPACT_CONTEXT;
     const stepResults = [];
     // Step 1 sees the context entering the workflow; subsequent steps see prior
-    // step outputs as governed by contextScope (#63).
+    // step outputs as governed by contextScope (#63) and handoff compaction (#64).
     let context = initialContext ?? "";
     for (const step of sequence) {
         let output;
@@ -53,16 +61,18 @@ export async function runSequential(workflow, prompt, initialContext, sessionId,
                 "The commander must handle this workflow step-by-step.");
         }
         stepResults.push({ label: stepLabel(step), output });
-        context = threadedContext(scope, stepResults);
+        context = threadedContext(scope, stepResults, compact);
     }
     const total = sequence.length;
     const header = `Workflow complete ✅ (${sequence.map(stepLabel).join(" → ")})`;
+    // Relay: when compacting, intermediate steps are shown as their handoff and the
+    // final step (the deliverable) in full; otherwise every step in full (#64).
     return [
         header,
         "",
         ...stepResults.flatMap(({ label, output }, idx) => [
             `## Step ${idx + 1}/${total} — ${label}`,
-            output,
+            compact && idx < total - 1 ? stepView(output, true) : output,
             "",
         ]),
     ].join("\n");
