@@ -177,6 +177,7 @@ Rules:
 |-------|----------|---------|-------------|
 | `sequence` | yes | — | Ordered steps. Each is an agent name, `{ "workflow": "name" }`, or `{ "checkpoint": "message" }` |
 | `commanderMayAlsoUse` | no | `[]` | Agents the commander may deviate to when a step fails |
+| `contextScope` | no | `all` | How much prior-step output is threaded into each step: `all` (every prior step), `last` (previous step only), or `none` (no prior-step context). Lower scopes cut token cost on long sequences |
 | `description` | no | — | Shown in `list_workflows` |
 | `disabled` | no | `false` | Hide from listing and block execution |
 

@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parse } from "jsonc-parser";
 import { assertAgentExists } from "./agent-registry.js";
+export const CONTEXT_SCOPES = ["all", "last", "none"];
+export const DEFAULT_CONTEXT_SCOPE = "all";
 export const DEFAULT_SETTINGS = {
     agentTimeoutMs: 5 * 60 * 1000, // 5 minutes
     maxConcurrent: 5,
@@ -310,11 +312,16 @@ function validateSequentialWorkflow(name, w) {
             }
         }
     }
+    const contextScope = w["contextScope"];
+    if (contextScope !== undefined && !CONTEXT_SCOPES.includes(contextScope)) {
+        throw new Error(`Workflow "${name}": "contextScope" must be one of ${CONTEXT_SCOPES.join(", ")}`);
+    }
     return {
         pattern: "sequential",
         description: typeof w["description"] === "string" ? w["description"] : undefined,
         sequence,
         commanderMayAlsoUse: Array.isArray(mayAlsoUse) ? mayAlsoUse : [],
+        ...(contextScope !== undefined ? { contextScope: contextScope } : {}),
     };
 }
 function validateOrchestratorWorkflow(name, w) {

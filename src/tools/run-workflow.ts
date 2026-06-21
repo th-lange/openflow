@@ -6,8 +6,8 @@ import { runConditional } from "./run-conditional.js";
 import { runFanout } from "./run-fanout.js";
 import { runParallel } from "./run-parallel.js";
 import { runDebate } from "./run-debate.js";
-import { resolveSettings } from "../config/workflow-loader.js";
-import type { SequentialWorkflow, EngineSettings } from "../config/workflow-loader.js";
+import { resolveSettings, DEFAULT_CONTEXT_SCOPE } from "../config/workflow-loader.js";
+import type { SequentialWorkflow, EngineSettings, ContextScope } from "../config/workflow-loader.js";
 import { UsageLedger, formatUsageFooter } from "../state/usage-ledger.js";
 
 type StepResult = { label: string; output: string };
@@ -16,6 +16,23 @@ function stepLabel(step: SequentialWorkflow["sequence"][number]): string {
   if (typeof step === "string") return step;
   if ("workflow" in step) return `[${step.workflow}]`;
   return "[checkpoint]";
+}
+
+/**
+ * Build the context threaded into the next step from the prior step results,
+ * honouring the workflow's contextScope (#63). `all` threads every prior result,
+ * `last` only the most recent, `none` threads nothing. Step numbering reflects
+ * each result's true position so labels stay stable across scopes.
+ */
+function threadedContext(scope: ContextScope, stepResults: StepResult[]): string {
+  if (scope === "none" || stepResults.length === 0) return "";
+  const indices =
+    scope === "last" ? [stepResults.length - 1] : stepResults.map((_, i) => i);
+  return [
+    "## Prior step results",
+    "",
+    ...indices.map((i) => `### Step ${i + 1} — ${stepResults[i].label}\n${stepResults[i].output}`),
+  ].join("\n");
 }
 
 // ── Sequential ────────────────────────────────────────────────────────────────
@@ -33,7 +50,10 @@ export async function runSequential(
   signal?: AbortSignal
 ): Promise<string> {
   const { sequence } = workflow;
+  const scope = workflow.contextScope ?? DEFAULT_CONTEXT_SCOPE;
   const stepResults: StepResult[] = [];
+  // Step 1 sees the context entering the workflow; subsequent steps see prior
+  // step outputs as governed by contextScope (#63).
   let context = initialContext ?? "";
 
   for (const step of sequence) {
@@ -53,11 +73,7 @@ export async function runSequential(
     }
 
     stepResults.push({ label: stepLabel(step), output });
-    context = [
-      "## Prior step results",
-      "",
-      ...stepResults.map(({ label, output }, idx) => `### Step ${idx + 1} — ${label}\n${output}`),
-    ].join("\n");
+    context = threadedContext(scope, stepResults);
   }
 
   const total = sequence.length;

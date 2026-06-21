@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`contextScope` for sequential workflows** (#63) — control how much prior-step output is threaded into each step: `all` (default; current behavior), `last` (previous step only), or `none`. Cuts the O(n²) token growth on long sequences. Settable in `openflow.json` and via `create_workflow`; validated at load time.
+
 ## [0.2.10] - 2026-06-21
 
 ### Added

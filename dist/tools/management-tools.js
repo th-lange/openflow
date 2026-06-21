@@ -29,6 +29,7 @@ function buildEntry(input) {
             base["commanderMayAlsoUse"] =
                 input.commanderMayAlsoUse ??
                     (input.sequence ?? []).filter((s) => typeof s === "string");
+            pick("contextScope");
             break;
         case "orchestrator":
             pick("agents", "satisfactionCriteria", "maxIterations");
