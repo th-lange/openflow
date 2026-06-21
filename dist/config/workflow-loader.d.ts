@@ -15,6 +15,14 @@ export type SequenceStep = string | {
 export type ContextScope = "all" | "last" | "none";
 export declare const CONTEXT_SCOPES: readonly ContextScope[];
 export declare const DEFAULT_CONTEXT_SCOPE: ContextScope;
+/**
+ * Whether a sequential workflow threads compact structured handoffs between
+ * steps (the default) instead of full step outputs (#64). When `true`, each
+ * step's `\`\`\`handoff` block — or a truncated fallback — is threaded and shown
+ * in the relay for intermediate steps; the final step is always shown in full.
+ * Set `false` to restore full-output threading and relay (pre-#64 behaviour).
+ */
+export declare const DEFAULT_COMPACT_CONTEXT = true;
 export type SequentialWorkflow = {
     pattern: "sequential";
     description?: string;
@@ -23,6 +31,7 @@ export type SequentialWorkflow = {
     sequence: SequenceStep[];
     commanderMayAlsoUse: string[];
     contextScope?: ContextScope;
+    compactContext?: boolean;
 };
 export type OrchestratorWorkflow = {
     pattern: "orchestrator";

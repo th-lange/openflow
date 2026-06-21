@@ -28,6 +28,16 @@ describe("contextScope parsing", () => {
       /contextScope.*must be one of all, last, none/
     );
   });
+
+  it("accepts a boolean compactContext and rejects non-booleans", () => {
+    const w = parseWorkflowEntry("x", { sequence: ["a"], compactContext: false }) as SequentialWorkflow;
+    assert.equal(w.compactContext, false);
+    assert.equal((parseWorkflowEntry("x", { sequence: ["a"] }) as SequentialWorkflow).compactContext, undefined);
+    assert.throws(
+      () => parseWorkflowEntry("x", { sequence: ["a"], compactContext: "yes" }),
+      /compactContext.*must be a boolean/
+    );
+  });
 });
 
 describe("contextScope threading in runSequential", () => {

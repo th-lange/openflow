@@ -4,6 +4,14 @@ import { parse } from "jsonc-parser";
 import { assertAgentExists } from "./agent-registry.js";
 export const CONTEXT_SCOPES = ["all", "last", "none"];
 export const DEFAULT_CONTEXT_SCOPE = "all";
+/**
+ * Whether a sequential workflow threads compact structured handoffs between
+ * steps (the default) instead of full step outputs (#64). When `true`, each
+ * step's `\`\`\`handoff` block — or a truncated fallback — is threaded and shown
+ * in the relay for intermediate steps; the final step is always shown in full.
+ * Set `false` to restore full-output threading and relay (pre-#64 behaviour).
+ */
+export const DEFAULT_COMPACT_CONTEXT = true;
 export const DEFAULT_SETTINGS = {
     agentTimeoutMs: 5 * 60 * 1000, // 5 minutes
     maxConcurrent: 5,
@@ -316,12 +324,17 @@ function validateSequentialWorkflow(name, w) {
     if (contextScope !== undefined && !CONTEXT_SCOPES.includes(contextScope)) {
         throw new Error(`Workflow "${name}": "contextScope" must be one of ${CONTEXT_SCOPES.join(", ")}`);
     }
+    const compactContext = w["compactContext"];
+    if (compactContext !== undefined && typeof compactContext !== "boolean") {
+        throw new Error(`Workflow "${name}": "compactContext" must be a boolean`);
+    }
     return {
         pattern: "sequential",
         description: typeof w["description"] === "string" ? w["description"] : undefined,
         sequence,
         commanderMayAlsoUse: Array.isArray(mayAlsoUse) ? mayAlsoUse : [],
         ...(contextScope !== undefined ? { contextScope: contextScope } : {}),
+        ...(compactContext !== undefined ? { compactContext } : {}),
     };
 }
 function validateOrchestratorWorkflow(name, w) {

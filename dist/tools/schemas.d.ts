@@ -28,6 +28,7 @@ export declare const createWorkflowArgs: {
         last: "last";
         none: "none";
     }>>;
+    compactContext: z.ZodOptional<z.ZodBoolean>;
     agents: z.ZodOptional<z.ZodArray<z.ZodString>>;
     satisfactionCriteria: z.ZodOptional<z.ZodString>;
     maxIterations: z.ZodOptional<z.ZodNumber>;

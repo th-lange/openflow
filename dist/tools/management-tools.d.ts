@@ -14,6 +14,7 @@ export type CreateWorkflowInput = {
     sequence?: SequenceStepInput[];
     commanderMayAlsoUse?: string[];
     contextScope?: "all" | "last" | "none";
+    compactContext?: boolean;
     agents?: string[];
     satisfactionCriteria?: string;
     maxIterations?: number;
