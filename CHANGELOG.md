@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.12] - 2026-06-21
+
 ### Documentation
 - **Token-efficiency guide** (#66) — a consolidated [Token efficiency](docs/extension.md#token-efficiency) section covering the cost footer, model routing, `contextScope`, structured handoffs (`compactContext`), and Langfuse tracing, plus a compatibility note on the compact-by-default change. The cost footer is now described in [Usage](docs/usage.md) too.
 
