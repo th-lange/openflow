@@ -8,7 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.10] - 2026-06-21
+
 ### Added
+- **Token/cost accounting** (#62) — every agent delegation now captures its token usage (input/output/reasoning, cache read/write) and cost from the OpenCode response. A workflow run aggregates these across all steps (including nested patterns) and appends a compact footer to the relay, e.g. `tokens: 12.3k in / 4.1k out · cache 82% read · ~$0.04 · 5 steps`. `delegate_task` shows a single-step footer. Foundational for the token-efficiency epic (#61).
 - **Interactive workflow builder** — `/build-workflow` activates a new primary `workflow-builder` agent that interviews the user element by element and writes a validated **sequential, commander-supervised** workflow to `openflow.json` (create and modify flows).
 - `list_agents` tool — read-only listing of available agents (optional `mode` filter), used by the builder to offer valid choices.
 - `locked: true` flag on workflow entries — locked workflows cannot be overwritten (even with `force`), enabled, or disabled by the management tools; marked `[locked]` in `list_workflows`.

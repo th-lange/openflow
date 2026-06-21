@@ -1,6 +1,6 @@
 import { delegateTask } from "./delegate-task.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
-export async function runConditional(workflow, prompt, context, sessionId, client, workDir, dispatch, settings, signal) {
+export async function runConditional(workflow, prompt, context, sessionId, client, workDir, dispatch, settings, ledger, signal) {
     const { router, routes, default: defaultWorkflow } = workflow;
     const conditions = routes.map((r) => r.condition);
     // Ask the router to classify the request and emit an openflow route block
@@ -13,7 +13,7 @@ export async function runConditional(workflow, prompt, context, sessionId, clien
         `{"route":"<one of: ${conditions.join(", ")}>"}`,
         "```",
     ].join("\n");
-    const { result: routerOutput } = await delegateTask({ agent: router, prompt: routerPrompt, context, sessionId }, client, signal, settings.agentTimeoutMs);
+    const { result: routerOutput } = await delegateTask({ agent: router, prompt: routerPrompt, context, sessionId }, client, signal, settings.agentTimeoutMs, ledger);
     const block = parseOpenflowBlock(routerOutput);
     const routeLabel = typeof block?.route === "string" ? block.route : null;
     const matched = routes.find((r) => r.condition === routeLabel);
@@ -21,7 +21,7 @@ export async function runConditional(workflow, prompt, context, sessionId, clien
     const routingNote = matched
         ? `Routing → ${targetName} (matched: "${routeLabel}")`
         : `No route matched "${routeLabel ?? "(none)"}". Using default: ${targetName}`;
-    const targetResult = await dispatch(targetName, prompt, context, sessionId, client, workDir, signal, settings);
+    const targetResult = await dispatch(targetName, prompt, context, sessionId, client, workDir, signal, settings, ledger);
     return `${routingNote}\n\n${targetResult}`;
 }
 //# sourceMappingURL=run-conditional.js.map

@@ -1,6 +1,7 @@
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import type { DelegateTaskInput } from "./delegate-task.js";
+import type { UsageLedger } from "../state/usage-ledger.js";
 
 export type DispatchResult = {
   index: number;
@@ -16,6 +17,8 @@ export type DispatchOptions = {
   maxConcurrent?: number;
   /** Per-agent timeout in milliseconds, forwarded to delegateTask. */
   timeoutMs?: number;
+  /** Usage ledger to accumulate each branch's token/cost into (#62). */
+  ledger?: UsageLedger;
 };
 
 export async function parallelDispatch(
@@ -33,7 +36,7 @@ export async function parallelDispatch(
       batch.map(async (task, batchIdx) => {
         const index = start + batchIdx;
         try {
-          const { result } = await delegateTask(task, client, signal, options?.timeoutMs);
+          const { result } = await delegateTask(task, client, signal, options?.timeoutMs, options?.ledger);
           return { index, agent: task.agent, output: result };
         } catch (e) {
           return {

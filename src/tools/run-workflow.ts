@@ -8,6 +8,7 @@ import { runParallel } from "./run-parallel.js";
 import { runDebate } from "./run-debate.js";
 import { resolveSettings } from "../config/workflow-loader.js";
 import type { SequentialWorkflow, EngineSettings } from "../config/workflow-loader.js";
+import { UsageLedger, formatUsageFooter } from "../state/usage-ledger.js";
 
 type StepResult = { label: string; output: string };
 
@@ -28,6 +29,7 @@ export async function runSequential(
   workDir: string,
   dispatch: typeof runWorkflow,
   settings: EngineSettings,
+  ledger: UsageLedger,
   signal?: AbortSignal
 ): Promise<string> {
   const { sequence } = workflow;
@@ -38,9 +40,9 @@ export async function runSequential(
     let output: string;
 
     if (typeof step === "string") {
-      ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, client, signal, settings.agentTimeoutMs));
+      ({ result: output } = await delegateTask({ agent: step, prompt, context, sessionId }, client, signal, settings.agentTimeoutMs, ledger));
     } else if ("workflow" in step) {
-      output = await dispatch(step.workflow, prompt, context, sessionId, client, workDir, signal, settings);
+      output = await dispatch(step.workflow, prompt, context, sessionId, client, workDir, signal, settings, ledger);
     } else {
       // checkpoint — top-level commander handles these; if we get here it means
       // something bypassed the load-time checkpoint-reference constraint
@@ -81,25 +83,47 @@ export async function runWorkflow(
   client: OpencodeClient,
   workDir: string,
   signal?: AbortSignal,
-  settings?: EngineSettings
+  settings?: EngineSettings,
+  ledger?: UsageLedger
 ): Promise<string> {
   const workflow = await getWorkflow(name, workDir);
-  // Resolve engine settings once at the top level; nested dispatches reuse them (#45).
+  // Resolve engine settings and the usage ledger once at the top level; nested
+  // dispatches reuse them so the cost footer aggregates the whole run (#45, #62).
+  const isTop = ledger === undefined;
   const resolved = settings ?? (await resolveSettings(workDir));
+  const led = ledger ?? new UsageLedger();
 
+  const result = await dispatchPattern(workflow, name, prompt, context, sessionId, client, workDir, resolved, led, signal);
+
+  // Only the outermost call owns the ledger, so it renders the aggregate footer.
+  return isTop ? result + formatUsageFooter(led) : result;
+}
+
+async function dispatchPattern(
+  workflow: Awaited<ReturnType<typeof getWorkflow>>,
+  name: string,
+  prompt: string,
+  context: string | undefined,
+  sessionId: string | undefined,
+  client: OpencodeClient,
+  workDir: string,
+  resolved: EngineSettings,
+  led: UsageLedger,
+  signal?: AbortSignal
+): Promise<string> {
   switch (workflow.pattern) {
     case "sequential":
-      return runSequential(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, signal);
+      return runSequential(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, led, signal);
     case "evaluator-optimizer":
-      return runEvaluatorOptimizer(workflow, prompt, context, sessionId, client, resolved, signal);
+      return runEvaluatorOptimizer(workflow, prompt, context, sessionId, client, resolved, led, signal);
     case "conditional":
-      return runConditional(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, signal);
+      return runConditional(workflow, prompt, context, sessionId, client, workDir, runWorkflow, resolved, led, signal);
     case "fanout":
-      return runFanout(workflow, prompt, context, sessionId, client, resolved, signal);
+      return runFanout(workflow, prompt, context, sessionId, client, resolved, led, signal);
     case "parallel":
-      return runParallel(workflow, prompt, context, sessionId, client, resolved, signal);
+      return runParallel(workflow, prompt, context, sessionId, client, resolved, led, signal);
     case "debate":
-      return runDebate(workflow, prompt, context, sessionId, client, resolved, signal);
+      return runDebate(workflow, prompt, context, sessionId, client, resolved, led, signal);
     case "orchestrator":
       throw new Error(
         `Workflow "${name}" uses pattern "orchestrator" which is prompt-driven. ` +

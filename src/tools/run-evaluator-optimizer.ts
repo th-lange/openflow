@@ -2,6 +2,7 @@ import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
 import type { EvaluatorOptimizerWorkflow, EngineSettings } from "../config/workflow-loader.js";
+import type { UsageLedger } from "../state/usage-ledger.js";
 
 export async function runEvaluatorOptimizer(
   workflow: EvaluatorOptimizerWorkflow,
@@ -10,6 +11,7 @@ export async function runEvaluatorOptimizer(
   sessionId: string | undefined,
   client: OpencodeClient,
   settings: EngineSettings,
+  ledger: UsageLedger,
   signal?: AbortSignal
 ): Promise<string> {
   const { producer, evaluator, maxIterations, passCriteria } = workflow;
@@ -29,7 +31,8 @@ export async function runEvaluatorOptimizer(
       { agent: producer, prompt, context: producerContext || undefined, sessionId },
       client,
       signal,
-      settings.agentTimeoutMs
+      settings.agentTimeoutMs,
+      ledger
     );
     lastProducerOutput = producerOutput;
 
@@ -57,7 +60,8 @@ export async function runEvaluatorOptimizer(
       },
       client,
       signal,
-      settings.agentTimeoutMs
+      settings.agentTimeoutMs,
+      ledger
     );
 
     // Missing or malformed block → treat as FAIL and continue (per #31 contract)
