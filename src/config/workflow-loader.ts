@@ -115,11 +115,21 @@ export type WorkflowRegistry = Record<string, Workflow>;
 
 // ── Engine settings (#45) ───────────────────────────────────────────────────────
 
+/** Optional Langfuse tracing config (#67). API keys come from the environment. */
+export type LangfuseSettings = {
+  /** Master switch; tracing is off unless this is true. */
+  enabled: boolean;
+  /** Self-hosted Langfuse base URL; falls back to LANGFUSE_HOST then Langfuse cloud. */
+  host?: string;
+};
+
 export type EngineSettings = {
   /** Per-agent delegation timeout in milliseconds. */
   agentTimeoutMs: number;
   /** Maximum number of agents dispatched concurrently (fan-out/parallel). */
   maxConcurrent: number;
+  /** Langfuse tracing; undefined or { enabled: false } means no tracing. */
+  langfuse?: LangfuseSettings;
 };
 
 export const DEFAULT_SETTINGS: EngineSettings = {
@@ -140,6 +150,7 @@ function isPositiveNumber(value: unknown): value is number {
  */
 export function mergeSettings(raw: unknown): EngineSettings {
   let { agentTimeoutMs, maxConcurrent } = DEFAULT_SETTINGS;
+  let langfuse: LangfuseSettings | undefined;
 
   if (raw !== undefined) {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
@@ -158,6 +169,7 @@ export function mergeSettings(raw: unknown): EngineSettings {
       }
       maxConcurrent = s["maxConcurrent"];
     }
+    langfuse = parseLangfuseSettings(s["langfuse"]);
   }
 
   const envTimeout = process.env["OPENFLOW_AGENT_TIMEOUT_MS"];
@@ -177,7 +189,25 @@ export function mergeSettings(raw: unknown): EngineSettings {
     maxConcurrent = n;
   }
 
-  return { agentTimeoutMs, maxConcurrent };
+  return { agentTimeoutMs, maxConcurrent, ...(langfuse ? { langfuse } : {}) };
+}
+
+function parseLangfuseSettings(raw: unknown): LangfuseSettings | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    throw new Error('"settings.langfuse" must be an object');
+  }
+  const l = raw as Record<string, unknown>;
+  if (l["enabled"] !== undefined && typeof l["enabled"] !== "boolean") {
+    throw new Error('"settings.langfuse.enabled" must be a boolean');
+  }
+  if (l["host"] !== undefined && typeof l["host"] !== "string") {
+    throw new Error('"settings.langfuse.host" must be a string');
+  }
+  return {
+    enabled: l["enabled"] === true,
+    ...(typeof l["host"] === "string" ? { host: l["host"] } : {}),
+  };
 }
 
 /**

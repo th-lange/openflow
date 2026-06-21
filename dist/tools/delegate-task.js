@@ -28,6 +28,7 @@ export async function delegateTask(input, client, signal, timeoutMs = TIMEOUT_MS
     const fullPrompt = context
         ? `## Context from prior steps\n\n${context}\n\n## Your task\n\n${prompt}`
         : prompt;
+    const startTime = new Date();
     // Create child session
     let childSessionId;
     try {
@@ -91,8 +92,14 @@ export async function delegateTask(input, client, signal, timeoutMs = TIMEOUT_MS
             stepStore.recordStep(sessionId, agent, summary);
         }
     }
-    // Accumulate usage for the run-level cost footer (#62)
-    ledger?.record(agent, usage, model);
+    // Accumulate usage for the run-level cost footer (#62); pass per-call detail so
+    // an attached trace can emit a full generation (#67).
+    ledger?.record(agent, usage, model, {
+        input: fullPrompt,
+        output: result,
+        startTime,
+        endTime: new Date(),
+    });
     // Clean up child session
     await client.session.delete({ path: { id: childSessionId } }).catch(() => { });
     return { result, childSessionId, stepIndex, usage, model };

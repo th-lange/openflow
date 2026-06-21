@@ -115,8 +115,31 @@ An optional top-level `"settings"` block tunes the execution engine. Both fields
 |---------|---------|-------------|
 | `agentTimeoutMs` | `300000` (5 min) | Per-agent delegation timeout in milliseconds. A delegation that exceeds it is aborted and reported as a failure. |
 | `maxConcurrent` | `5` | Maximum number of agents dispatched at once in `fanout` / `parallel` workflows. |
+| `langfuse` | — | Optional [Langfuse](https://langfuse.com) tracing — see [Tracing](#tracing-langfuse). |
 
 Environment variables override the file (useful for per-machine tuning without editing config): `OPENFLOW_AGENT_TIMEOUT_MS` and `OPENFLOW_MAX_CONCURRENT`. Invalid values (non-positive timeout, non-integer concurrency) are rejected at startup.
+
+### Tracing (Langfuse)
+
+Each workflow run can be emitted as a [Langfuse](https://langfuse.com) **trace**, with every agent delegation a **generation** carrying its model, input, output, token usage, cost, and latency — turning the inline cost footer into per-step, per-agent dashboards.
+
+Tracing is **off by default**. To enable it:
+
+1. Install the SDK in your project: `npm i langfuse`
+2. Set the API keys in the environment: `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`
+3. Turn it on in `openflow.json`:
+
+```json
+{
+  "settings": {
+    "langfuse": { "enabled": true, "host": "https://cloud.langfuse.com" }
+  }
+}
+```
+
+`host` is optional (falls back to `LANGFUSE_HOST`, then Langfuse cloud) — set it to your own URL for self-hosted Langfuse. Tracing is best-effort: if the package is missing, the keys are unset, or the backend is unreachable, the run proceeds normally and tracing silently no-ops.
+
+> Tracing sends prompts and outputs to Langfuse. Keep it disabled for sensitive work, or self-host via `host`.
 
 ## Workflow patterns
 

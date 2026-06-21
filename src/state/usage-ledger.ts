@@ -18,6 +18,22 @@ export type Usage = {
 
 export type UsageStep = { agent: string; model?: string; usage: Usage };
 
+/** Optional per-call detail captured only when a trace is attached (#67). */
+export type GenerationDetail = { input?: string; output?: string; startTime?: Date; endTime?: Date };
+
+/** Sink the ledger forwards each step to when tracing is enabled (#67). */
+export interface UsageTrace {
+  generation(data: {
+    name: string;
+    model?: string;
+    input?: string;
+    output?: string;
+    usage: { input: number; output: number; total: number; cost: number };
+    startTime?: Date;
+    endTime?: Date;
+  }): void;
+}
+
 export const ZERO_USAGE: Usage = {
   input: 0,
   output: 0,
@@ -63,8 +79,20 @@ export function extractUsage(info: UsageSource | undefined): { usage: Usage; mod
 export class UsageLedger {
   private readonly entries: UsageStep[] = [];
 
-  record(agent: string, usage: Usage, model?: string): void {
+  /** When a trace is attached, each recorded step is also emitted as a generation (#67). */
+  constructor(private readonly trace?: UsageTrace) {}
+
+  record(agent: string, usage: Usage, model?: string, detail?: GenerationDetail): void {
     this.entries.push({ agent, model, usage });
+    this.trace?.generation({
+      name: agent,
+      model,
+      input: detail?.input,
+      output: detail?.output,
+      startTime: detail?.startTime,
+      endTime: detail?.endTime,
+      usage: { input: usage.input, output: usage.output, total: usage.input + usage.output, cost: usage.cost },
+    });
   }
 
   get steps(): readonly UsageStep[] {
