@@ -19,6 +19,8 @@ export type FakeUsage = {
 
 export type FakeClientOptions = {
   agents: string[];
+  /** Optional per-agent model returned by app.agents(), for model-visibility tests (#60). */
+  agentModels?: Record<string, { providerID: string; modelID: string }>;
   /**
    * Produce the agent's text response. Receives the agent name and the full
    * prompt text (delegateTask has already merged any context in). May be async
@@ -33,23 +35,31 @@ export type FakeClientOptions = {
   usage?: (agent: string, text: string) => FakeUsage;
 };
 
+export type TitleUpdate = { id: string; title?: string };
+
 export type FakeClient = OpencodeClient & {
   readonly calls: PromptCall[];
   readonly created: string[];
   readonly deleted: string[];
+  readonly titled: TitleUpdate[];
 };
 
 export function makeFakeClient(opts: FakeClientOptions): FakeClient {
   const calls: PromptCall[] = [];
   const created: string[] = [];
   const deleted: string[] = [];
+  const titled: TitleUpdate[] = [];
   let counter = 0;
 
   const client = {
     app: {
       agents: () =>
         Promise.resolve({
-          data: opts.agents.map((name) => ({ name, mode: "subagent" })) as any,
+          data: opts.agents.map((name) => ({
+            name,
+            mode: "subagent",
+            ...(opts.agentModels?.[name] ? { model: opts.agentModels[name] } : {}),
+          })) as any,
           error: undefined,
         }),
     },
@@ -58,6 +68,10 @@ export function makeFakeClient(opts: FakeClientOptions): FakeClient {
         const id = `child-${++counter}`;
         created.push(id);
         return Promise.resolve({ data: { id } as any, error: undefined });
+      },
+      update: ({ path, body }: any) => {
+        titled.push({ id: path.id, title: body?.title });
+        return Promise.resolve({ data: {} as any, error: undefined });
       },
       prompt: async ({ path, body }: any) => {
         const agent = body.agent as string;
@@ -87,7 +101,7 @@ export function makeFakeClient(opts: FakeClientOptions): FakeClient {
   } as unknown as FakeClient;
 
   // Expose the recorders (the cast above strips the literal's extra props).
-  Object.assign(client, { calls, created, deleted });
+  Object.assign(client, { calls, created, deleted, titled });
   return client;
 }
 

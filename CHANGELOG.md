@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Agent + model visibility** (#60) — the agent registry now carries each agent's explicit model. `list_agents` shows it (`- coder (subagent) [anthropic/claude-sonnet-4-6]: …`), sequential step headers annotate the model handling each step (`Step 2/3 — coder (anthropic/claude-opus-4-8)`), and `delegate_task` prefixes the agent + model. Running a workflow also titles the session `workflow: <name>` as a best-effort breadcrumb (errors swallowed; does not change the active-agent indicator — see #58).
+
 ## [0.2.12] - 2026-06-21
 
 ### Documentation

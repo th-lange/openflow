@@ -19,7 +19,7 @@ It should return null instead.
 
 The commander runs code-driven patterns via `run_workflow` — fan-out and parallel branches execute concurrently, and iteration/round limits are enforced in code, not left to the model.
 
-Each run ends with a one-line cost footer (`tokens: … in / … out · cache …% read · ~$… · N steps`) summing token usage and cost across every step. See [Token efficiency](./extension.md#token-efficiency) for what the numbers mean and how to lower them.
+Each step header names the agent and, when the agent sets an explicit model, that model — e.g. `## Step 2/3 — coder (anthropic/claude-opus-4-8)`. Running a workflow also titles the session `workflow: <name>` as a breadcrumb in the sessions list. Each run ends with a one-line cost footer (`tokens: … in / … out · cache …% read · ~$… · N steps`) summing token usage and cost across every step. See [Token efficiency](./extension.md#token-efficiency) for what the numbers mean and how to lower them.
 
 ## List available workflows
 
