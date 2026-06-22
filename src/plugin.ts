@@ -82,7 +82,8 @@ export const openflow: Plugin = async ({ client, directory }: PluginInput): Prom
           if (workflows.length === 0) return "No workflows defined in openflow.json.";
           return workflows
             .map((w) => {
-              const tag = `${w.disabled ? " [disabled]" : ""}${"locked" in w && w.locked ? " [locked]" : ""}`;
+              const origin = w.origin === "global" ? " [global]" : w.origin === "project" ? " [project]" : "";
+              const tag = `${origin}${w.disabled ? " [disabled]" : ""}${"locked" in w && w.locked ? " [locked]" : ""}`;
               if (!isValidWorkflow(w)) return `- ${w.name}${tag} ⚠ invalid: ${w.error}`;
               return `- ${w.name}${tag}${w.description ? `: ${w.description}` : ""} (${summariseWorkflow(w)})`;
             })

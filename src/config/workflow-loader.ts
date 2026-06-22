@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { homedir } from "node:os";
 import { parse, type ParseError } from "jsonc-parser";
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { assertAgentExists } from "./agent-registry.js";
@@ -243,11 +244,14 @@ export function validateAgents(raw: unknown): Record<string, Record<string, unkn
 export async function resolveSettings(
   directory: string = process.cwd()
 ): Promise<EngineSettings> {
-  const parsed = await readOpenflowFile(directory);
+  // Settings layer project-over-global (#82): a project tunes the shared
+  // baseline per-project. Environment overrides still win over both (applied
+  // inside mergeSettings).
+  const { global, project } = await readLayers(directory);
+  const g = global["settings"];
+  const p = project["settings"];
   const raw =
-    parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)["settings"]
-      : undefined;
+    isPlainObject(g) && isPlainObject(p) ? { ...g, ...p } : p !== undefined ? p : g;
   return mergeSettings(raw);
 }
 
@@ -280,27 +284,128 @@ export async function readOpenflowFile(
   return parsed;
 }
 
+// ── Layered resolution: global + project (#82) ──────────────────────────────────
+
+/**
+ * Which layer a workflow (or other entry) came from. Workflows defined in the
+ * **global** `openflow.json` are a shared baseline available in every project; a
+ * **project** `openflow.json` is additive and may introduce new workflows but
+ * cannot shadow a global one (global wins on a name collision).
+ */
+export type WorkflowOrigin = "global" | "project";
+
+/**
+ * OpenCode's global config directory — the same location `openflow install`
+ * targets. `OPENFLOW_GLOBAL_DIR` overrides it (used by tests to stay hermetic);
+ * otherwise XDG_CONFIG_HOME / ~/.config/opencode, or %APPDATA%\opencode on
+ * Windows.
+ */
+export function openflowGlobalDir(): string {
+  const override = process.env["OPENFLOW_GLOBAL_DIR"];
+  if (override) return resolve(override);
+  if (process.platform === "win32") {
+    return resolve(process.env["APPDATA"] ?? resolve(homedir(), "AppData", "Roaming"), "opencode");
+  }
+  const xdg = process.env["XDG_CONFIG_HOME"] ?? resolve(homedir(), ".config");
+  return resolve(xdg, "opencode");
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** Read one openflow.json layer as a top-level object ({} when absent). */
+async function readLayer(dir: string, label: string): Promise<Record<string, unknown>> {
+  const parsed = await readOpenflowFile(dir); // throws on invalid JSON
+  if (parsed === undefined) return {};
+  if (!isPlainObject(parsed)) {
+    throw new Error(`${label}openflow.json must be a JSON object`);
+  }
+  return parsed;
+}
+
+/**
+ * Read the global and project layers. The global layer is skipped when the
+ * project directory *is* the global config dir, so a single file is never read
+ * (and counted) twice.
+ */
+async function readLayers(
+  projectDir: string
+): Promise<{ global: Record<string, unknown>; project: Record<string, unknown> }> {
+  const globalDir = openflowGlobalDir();
+  const project = await readLayer(projectDir, "");
+  const global =
+    resolve(projectDir) === resolve(globalDir) ? {} : await readLayer(globalDir, "global ");
+  return { global, project };
+}
+
+/** Extract the `workflows` sub-map from a layer object ({} when absent/invalid). */
+function workflowsOf(layer: Record<string, unknown>): Record<string, unknown> {
+  const w = layer["workflows"];
+  return isPlainObject(w) ? w : {};
+}
+
+/**
+ * Resolve the merged workflow map from the global + project layers (#82).
+ * Project entries are laid down first, then global entries overlaid, so a name
+ * present in both resolves to the **global** definition (project is additive and
+ * cannot shadow a global workflow). Returns the merged raw map plus the origin
+ * of each name for listings and diagnostics.
+ */
+export async function resolveWorkflowMaps(
+  projectDir: string = process.cwd()
+): Promise<{ merged: Record<string, unknown>; origin: Record<string, WorkflowOrigin> }> {
+  const { global, project } = await readLayers(projectDir);
+  const merged: Record<string, unknown> = {};
+  const origin: Record<string, WorkflowOrigin> = {};
+  for (const [name, raw] of Object.entries(workflowsOf(project))) {
+    merged[name] = raw;
+    origin[name] = "project";
+  }
+  for (const [name, raw] of Object.entries(workflowsOf(global))) {
+    merged[name] = raw;
+    origin[name] = "global";
+  }
+  return { merged, origin };
+}
+
+/**
+ * Resolve user-defined agents from the global + project layers (#82), global
+ * winning on a name collision — consistent with workflow resolution and with
+ * the built-in-wins precedence in agent injection (#79).
+ */
+export async function resolveUserAgents(
+  directory: string = process.cwd()
+): Promise<Record<string, Record<string, unknown>>> {
+  const { global, project } = await readLayers(directory);
+  const merged: Record<string, Record<string, unknown>> = {};
+  for (const [name, def] of Object.entries(validateAgents(project["agents"]))) merged[name] = def;
+  for (const [name, def] of Object.entries(validateAgents(global["agents"]))) merged[name] = def;
+  return merged;
+}
+
 // ── Loader ────────────────────────────────────────────────────────────────────
 
 export async function loadWorkflows(
   client: OpencodeClient,
   directory: string = process.cwd()
 ): Promise<WorkflowRegistry> {
-  const parsed = await readOpenflowFile(directory);
-  if (parsed === undefined) return {};
+  // Resolve the global + project layers (#82). Each layer's settings/agents are
+  // validated at startup; the workflow registry is built from the merged map
+  // (global wins on a name collision — project is additive only).
+  const { global, project } = await readLayers(directory);
+  mergeSettings(global["settings"]); // validate the settings block at startup (#45)
+  mergeSettings(project["settings"]);
+  validateAgents(global["agents"]); // validate the agents block at startup (#79)
+  validateAgents(project["agents"]);
 
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("openflow.json must be a JSON object");
-  }
-
-  const obj = parsed as Record<string, unknown>;
-  mergeSettings(obj["settings"]); // validate the settings block at startup (#45)
-  validateAgents(obj["agents"]); // validate the agents block at startup (#79)
-  const rawWorkflows = obj["workflows"];
-  if (!rawWorkflows || typeof rawWorkflows !== "object") return {};
+  const rawWorkflows: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(workflowsOf(project))) rawWorkflows[name] = entry;
+  for (const [name, entry] of Object.entries(workflowsOf(global))) rawWorkflows[name] = entry;
+  if (Object.keys(rawWorkflows).length === 0) return {};
 
   const registry: WorkflowRegistry = {};
-  for (const [name, entry] of Object.entries(rawWorkflows as Record<string, unknown>)) {
+  for (const [name, entry] of Object.entries(rawWorkflows)) {
     registry[name] = parseWorkflowEntry(name, entry);
   }
 

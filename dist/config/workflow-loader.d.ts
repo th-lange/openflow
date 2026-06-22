@@ -144,6 +144,37 @@ export declare function resolveSettings(directory?: string): Promise<EngineSetti
  * lookup tools (see workflow-tools.ts) — #38.
  */
 export declare function readOpenflowFile(directory?: string): Promise<unknown | undefined>;
+/**
+ * Which layer a workflow (or other entry) came from. Workflows defined in the
+ * **global** `openflow.json` are a shared baseline available in every project; a
+ * **project** `openflow.json` is additive and may introduce new workflows but
+ * cannot shadow a global one (global wins on a name collision).
+ */
+export type WorkflowOrigin = "global" | "project";
+/**
+ * OpenCode's global config directory — the same location `openflow install`
+ * targets. `OPENFLOW_GLOBAL_DIR` overrides it (used by tests to stay hermetic);
+ * otherwise XDG_CONFIG_HOME / ~/.config/opencode, or %APPDATA%\opencode on
+ * Windows.
+ */
+export declare function openflowGlobalDir(): string;
+/**
+ * Resolve the merged workflow map from the global + project layers (#82).
+ * Project entries are laid down first, then global entries overlaid, so a name
+ * present in both resolves to the **global** definition (project is additive and
+ * cannot shadow a global workflow). Returns the merged raw map plus the origin
+ * of each name for listings and diagnostics.
+ */
+export declare function resolveWorkflowMaps(projectDir?: string): Promise<{
+    merged: Record<string, unknown>;
+    origin: Record<string, WorkflowOrigin>;
+}>;
+/**
+ * Resolve user-defined agents from the global + project layers (#82), global
+ * winning on a name collision — consistent with workflow resolution and with
+ * the built-in-wins precedence in agent injection (#79).
+ */
+export declare function resolveUserAgents(directory?: string): Promise<Record<string, Record<string, unknown>>>;
 export declare function loadWorkflows(client: OpencodeClient, directory?: string): Promise<WorkflowRegistry>;
 /**
  * Parse and validate a single workflow entry into a typed `Workflow`.

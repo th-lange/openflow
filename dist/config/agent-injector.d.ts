@@ -15,8 +15,9 @@ export type Injectables = {
  */
 export declare function loadBuiltins(): Promise<Injectables>;
 /**
- * User-defined agents from the project's `openflow.json` `agents` block.
- * Validated via the shared loader; an absent file or block yields {}.
+ * User-defined agents from the global + project `openflow.json` `agents` blocks
+ * (#82), global winning on a name collision. Validated via the shared loader; an
+ * absent file or block yields {}.
  */
 export declare function loadUserAgents(directory: string): Promise<Record<string, AgentDef>>;
 /**

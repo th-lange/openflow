@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "jsonc-parser";
-import { readOpenflowFile, validateAgents } from "./workflow-loader.js";
+import { resolveUserAgents } from "./workflow-loader.js";
 // The package root is two levels up from this module (src/config or dist/config),
 // where the generated opencode.json bundle ships.
 const PKG_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -32,14 +32,12 @@ export async function loadBuiltins() {
     };
 }
 /**
- * User-defined agents from the project's `openflow.json` `agents` block.
- * Validated via the shared loader; an absent file or block yields {}.
+ * User-defined agents from the global + project `openflow.json` `agents` blocks
+ * (#82), global winning on a name collision. Validated via the shared loader; an
+ * absent file or block yields {}.
  */
 export async function loadUserAgents(directory) {
-    const parsed = await readOpenflowFile(directory);
-    if (!isRecord(parsed))
-        return {};
-    return validateAgents(parsed["agents"]);
+    return resolveUserAgents(directory);
 }
 /**
  * Merge built-in and user-defined agents/commands into the host `config`,
