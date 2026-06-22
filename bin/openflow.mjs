@@ -79,61 +79,11 @@ async function install(targetDir) {
     console.log("  · openflow plugin already registered — skipping");
   }
 
-  // ── /workflow slash command ──────────────────────────────────────────────────
-  // Uses the JSON "command" config key so OpenCode routes to commander automatically,
-  // regardless of which agent the user currently has active.
-  if (!config.command?.workflow) {
-    edits.push({
-      path: ["command", "workflow"],
-      value: {
-        description: "Run a named openflow workflow",
-        agent: "commander",
-        template: "Run workflow: $ARGUMENTS",
-      },
-    });
-    changed = true;
-    console.log("  ✓ /workflow command registered");
-  } else {
-    console.log("  · /workflow command already configured — skipping");
-  }
-
-  // ── /build-workflow slash command ────────────────────────────────────────────
-  // Routes to the workflow-builder primary agent for interactive authoring.
-  if (!config.command?.["build-workflow"]) {
-    edits.push({
-      path: ["command", "build-workflow"],
-      value: {
-        description: "Interactively create or modify a workflow",
-        agent: "workflow-builder",
-        template: "$ARGUMENTS",
-      },
-    });
-    changed = true;
-    console.log("  ✓ /build-workflow command registered");
-  } else {
-    console.log("  · /build-workflow command already configured — skipping");
-  }
-
-  // ── agents ───────────────────────────────────────────────────────────────────
-  const srcAgents = parseConfig(await readText(resolve(PKG_ROOT, "opencode.json"))).agent ?? {};
-  const existingAgents = config.agent ?? {};
-  const added = [];
-  const skipped = [];
-  for (const [name, def] of Object.entries(srcAgents)) {
-    if (existingAgents[name]) {
-      skipped.push(name);
-    } else {
-      edits.push({ path: ["agent", name], value: def });
-      added.push(name);
-    }
-  }
-  if (added.length > 0) {
-    changed = true;
-    console.log(`  ✓ Agents added: ${added.join(", ")}`);
-  }
-  if (skipped.length > 0) {
-    console.log(`  · Agents already present: ${skipped.join(", ")}`);
-  }
+  // Agents and the /workflow + /build-workflow commands are no longer copied
+  // here. The plugin injects them at load time via its `config` hook (#79), so
+  // the only thing install must write is the one bootstrap plugin entry above.
+  // Names already present in the host config are never overwritten by injection,
+  // so earlier installs that copied agents/commands in keep working unchanged.
 
   if (changed) {
     for (const { path, value } of edits) {
@@ -143,9 +93,10 @@ async function install(targetDir) {
     await writeFile(write, text.endsWith("\n") ? text : text + "\n", "utf-8");
     console.log(`\n  Wrote ${write}`);
   } else {
-    console.log("\n  Already fully configured — nothing to change.");
+    console.log("\n  Already registered — nothing to change.");
   }
-  console.log("  Restart OpenCode to activate the /workflow command.\n");
+  console.log("  Agents and the /workflow + /build-workflow commands are provided");
+  console.log("  by the plugin itself — restart OpenCode to load them.\n");
 }
 
 const [,, cmd, ...args] = process.argv;

@@ -9,7 +9,7 @@ Multi-step workflow orchestration for [OpenCode](https://opencode.ai). Define na
 ```bash
 git clone https://github.com/th-lange/openflow.git
 cd openflow && npm install && npm link
-openflow install            # registers the plugin, commands, and agents in OpenCode
+openflow install            # registers the openflow plugin in OpenCode (one line; agents + commands come from the plugin)
 ```
 
 Then create an `openflow.json` in your project (or run `/build-workflow` to build one interactively) and start OpenCode:

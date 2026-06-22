@@ -84,6 +84,30 @@ function parseLangfuseSettings(raw) {
         ...(typeof l["host"] === "string" ? { host: l["host"] } : {}),
     };
 }
+// ── Agents block (#79) ──────────────────────────────────────────────────────────
+/**
+ * Validate the optional top-level `agents` block in openflow.json. It maps an
+ * agent name to an OpenCode AgentConfig object, injected into the host at load
+ * time (see agent-injector.ts). Validation is intentionally shallow — name →
+ * object — because OpenCode owns the precise AgentConfig schema and validates it
+ * itself. Returns the block (or {} when absent); throws on a malformed shape so
+ * a typo is caught at startup rather than silently dropped.
+ */
+export function validateAgents(raw) {
+    if (raw === undefined)
+        return {};
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        throw new Error('openflow.json "agents" must be an object');
+    }
+    const out = {};
+    for (const [name, def] of Object.entries(raw)) {
+        if (typeof def !== "object" || def === null || Array.isArray(def)) {
+            throw new Error(`openflow.json agent "${name}" must be an object`);
+        }
+        out[name] = def;
+    }
+    return out;
+}
 /**
  * Resolve engine settings from `openflow.json` in `directory`, merged with
  * environment overrides and defaults. Missing file or missing `settings` block
@@ -133,6 +157,7 @@ export async function loadWorkflows(client, directory = process.cwd()) {
     }
     const obj = parsed;
     mergeSettings(obj["settings"]); // validate the settings block at startup (#45)
+    validateAgents(obj["agents"]); // validate the agents block at startup (#79)
     const rawWorkflows = obj["workflows"];
     if (!rawWorkflows || typeof rawWorkflows !== "object")
         return {};

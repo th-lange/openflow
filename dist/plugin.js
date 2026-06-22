@@ -9,6 +9,7 @@ import { titleSession } from "./tools/session-title.js";
 import { loadWorkflows, resolveSettings } from "./config/workflow-loader.js";
 import { UsageLedger, formatUsageFooter } from "./state/usage-ledger.js";
 import { createWorkflowArgs, createAgentArgs } from "./tools/schemas.js";
+import { loadBuiltins, loadUserAgents, mergeInjectables } from "./config/agent-injector.js";
 // Native OpenCode plugin entrypoint (ADR 0001 / #39).
 //
 // The plugin host injects an already-connected `client` plus the correct
@@ -22,6 +23,27 @@ export const openflow = async ({ client, directory }) => {
         console.error(`[openflow] openflow.json failed validation: ${e instanceof Error ? e.message : String(e)}`);
     });
     return {
+        // Single-file install (#79): inject openflow's built-in agents/commands and
+        // any user agents from openflow.json into the host config at load, instead
+        // of `openflow install` copying them into opencode.json. Best-effort —
+        // names already present in the host config are never clobbered, and any
+        // failure is logged without bricking the host.
+        config: async (config) => {
+            try {
+                const [builtins, userAgents] = await Promise.all([
+                    loadBuiltins(),
+                    loadUserAgents(directory),
+                ]);
+                const added = mergeInjectables(config, builtins, userAgents);
+                if (added.agents.length > 0 || added.commands.length > 0) {
+                    console.error(`[openflow] injected ${added.agents.length} agent(s)` +
+                        `${added.commands.length ? ` and ${added.commands.length} command(s)` : ""}`);
+                }
+            }
+            catch (e) {
+                console.error(`[openflow] agent/command injection failed: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        },
         tool: {
             get_workflow: tool({
                 description: "Look up a workflow definition by name. Returns the full config including pattern, sequence or agents, and constraints.",
