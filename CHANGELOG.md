@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14] - 2026-06-22
+
 ### Added
 - **Single-file install** (#79) — the plugin now injects its built-in agents and the `/workflow` + `/build-workflow` commands into OpenCode at load via the `config` hook, instead of `openflow install` copying them into `opencode.json`. `install` writes only the one bootstrap plugin entry. Define your own agents in an optional top-level `agents` block in `openflow.json`, co-located with the workflows that use them — they're injected too. Injection never overwrites a name already present in `opencode.json` (native config and reserved built-ins always win), so existing installs keep working unchanged.
 
@@ -99,7 +101,8 @@ Initial beta line. Highlights:
 - `openflow` install CLI that configures `opencode.json`/`.jsonc` (global or per-project).
 - README, sample `openflow.json`, and E2E test suite.
 
-[Unreleased]: https://github.com/th-lange/openflow/compare/v0.2.9...HEAD
+[Unreleased]: https://github.com/th-lange/openflow/compare/v0.2.14...HEAD
+[0.2.14]: https://github.com/th-lange/openflow/compare/v0.2.13...v0.2.14
 [0.2.9]: https://github.com/th-lange/openflow/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/th-lange/openflow/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/th-lange/openflow/compare/v0.2.6...v0.2.7
