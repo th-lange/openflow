@@ -405,22 +405,26 @@ Accepted by all patterns:
 
 ## Agents
 
-### Agent fields
+The built-in agents (see [Usage](./usage.md#built-in-agents)) ship with the plugin and are injected into OpenCode automatically — you don't install or configure them.
+
+### Defining your own agents
+
+Add an optional top-level `"agents"` block to `openflow.json`, co-located with the workflows that use them. Each entry is a standard OpenCode agent config keyed by name:
 
 ```json
 {
-  "agent": {
-    "my-agent": {
-      "description": "One-line summary shown in tool listings",
+  "agents": {
+    "documenter": {
+      "description": "Writes JSDoc comments for TypeScript functions",
       "mode": "subagent",
       "model": "anthropic/claude-haiku-4-5",
-      "prompt": "You are ...",
-      "permission": {
-        "edit": "allow",
-        "bash": "deny"
-      },
+      "prompt": "You add concise JSDoc comments. Do not change behaviour.",
+      "permission": { "edit": "allow", "bash": "deny" },
       "tools": {}
     }
+  },
+  "workflows": {
+    "document": { "sequence": ["documenter"] }
   }
 }
 ```
@@ -434,7 +438,9 @@ Accepted by all patterns:
 | `permission.bash` | `deny` | `allow` or `deny` shell commands |
 | `tools` | `{}` | Per-tool enable/disable map for the agent |
 
-Agents are defined in your project's `opencode.json` under `"agent"`. The built-in agents (see [Usage](./usage.md#built-in-agents)) can be copied as-is. Changes to `opencode.json` require an OpenCode restart before new agents are usable.
+The plugin injects these at load (via its `config` hook), so they appear in `list_agents` and can be referenced by workflows — **restart OpenCode** after editing the block. Injection **never overwrites** an agent already defined in your `opencode.json`, and a name that collides with a built-in keeps the built-in, so don't reuse reserved names like `commander` or `workflow-builder`. The block is validated at startup; a malformed entry is reported in the OpenCode logs.
+
+> The `create_agent` tool and a hand-written `"agent"` block in `opencode.json` still work (OpenCode's native location); the `agents` block above is the single-file equivalent and is preferred for openflow-owned agents.
 
 ### Authoring the built-in agents (this repo)
 

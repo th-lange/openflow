@@ -121,6 +121,15 @@ export declare const DEFAULT_SETTINGS: EngineSettings;
  */
 export declare function mergeSettings(raw: unknown): EngineSettings;
 /**
+ * Validate the optional top-level `agents` block in openflow.json. It maps an
+ * agent name to an OpenCode AgentConfig object, injected into the host at load
+ * time (see agent-injector.ts). Validation is intentionally shallow — name →
+ * object — because OpenCode owns the precise AgentConfig schema and validates it
+ * itself. Returns the block (or {} when absent); throws on a malformed shape so
+ * a typo is caught at startup rather than silently dropped.
+ */
+export declare function validateAgents(raw: unknown): Record<string, Record<string, unknown>>;
+/**
  * Resolve engine settings from `openflow.json` in `directory`, merged with
  * environment overrides and defaults. Missing file or missing `settings` block
  * yields the defaults.

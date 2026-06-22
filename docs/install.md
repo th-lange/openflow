@@ -33,13 +33,11 @@ To install into a specific project instead:
 openflow install /path/to/project
 ```
 
-Either way, the command registers, in `opencode.jsonc` / `opencode.json`:
+The command writes a single line to `opencode.jsonc` / `opencode.json`: the openflow **plugin** (an absolute `file://` entry under `plugin`). That's the only bootstrap OpenCode needs.
 
-- the openflow **plugin** (an absolute `file://` entry under `plugin`),
-- the `/workflow` and `/build-workflow` slash commands,
-- all built-in agent definitions under `agent`.
+Everything else — the built-in agents and the `/workflow` and `/build-workflow` slash commands — is provided by the plugin itself, injected into OpenCode's config when it loads. Nothing is copied into your `opencode.json`. Names you've already defined there are never overwritten by the injection, so a pre-existing agent or command always wins.
 
-Re-running is safe — existing entries are never overwritten, and comments/formatting in your config are preserved.
+Re-running is safe — the plugin entry is added once, and comments/formatting in your config are preserved.
 
 ## 3. Create `openflow.json` in your project
 
@@ -76,7 +74,7 @@ The `/workflow` command routes directly to the `commander` agent regardless of w
 
 ## Uninstall
 
-There's no uninstall command — remove the entries `openflow install` added from your `opencode.json` / `opencode.jsonc`: the `plugin` entry pointing at openflow, the `workflow` / `build-workflow` commands, and any openflow `agent` definitions you no longer want. Then `npm unlink openflow` (or remove the clone).
+There's no uninstall command — remove the openflow `plugin` entry from your `opencode.json` / `opencode.jsonc`. That stops the agents and commands from being injected. If you upgraded from an older version that copied agents and commands directly into your config, remove those leftover `agent` / `command` entries too. Then `npm unlink openflow` (or remove the clone).
 
 ---
 
