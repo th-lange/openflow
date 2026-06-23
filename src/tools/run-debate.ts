@@ -1,6 +1,8 @@
 import { type OpencodeClient } from "@opencode-ai/sdk";
 import { delegateTask } from "./delegate-task.js";
 import { parseOpenflowBlock } from "../utils/openflow-block.js";
+import { compactForThread } from "../utils/handoff.js";
+import { DEFAULT_COMPACT_CONTEXT } from "../config/workflow-loader.js";
 import type { DebateWorkflow, EngineSettings } from "../config/workflow-loader.js";
 import type { UsageLedger } from "../state/usage-ledger.js";
 
@@ -8,6 +10,26 @@ type Turn = { role: string; content: string };
 
 function transcript(turns: Turn[]): string {
   return turns.map((t, i) => `## Turn ${i + 1} — ${t.role}\n${t.content}`).join("\n\n");
+}
+
+/**
+ * Transcript threaded *between* turns (#73). Without compaction the full,
+ * growing transcript is re-sent on every turn — O(n²) input tokens. When
+ * compacting (the default, #64), every turn except the most recent is reduced
+ * to its handoff block or a bounded fallback, so inter-turn context stops
+ * growing with the whole transcript. The latest turn stays full because each
+ * participant is prompted to engage with it directly. The judge and the final
+ * relay still receive the full transcript (see runDebate) so verdict quality
+ * and the readable output are unaffected.
+ */
+function threadedTranscript(turns: Turn[], compact: boolean): string {
+  if (!compact) return transcript(turns);
+  return turns
+    .map((t, i) => {
+      const content = i === turns.length - 1 ? t.content : compactForThread(t.content);
+      return `## Turn ${i + 1} — ${t.role}\n${content}`;
+    })
+    .join("\n\n");
 }
 
 export async function runDebate(
@@ -21,6 +43,7 @@ export async function runDebate(
   signal?: AbortSignal
 ): Promise<string> {
   const { proposer, critic, rounds, judge } = workflow;
+  const compact = workflow.compactContext ?? DEFAULT_COMPACT_CONTEXT;
   const turns: Turn[] = [];
 
   // --- Proposer: initial case ---
@@ -44,7 +67,7 @@ export async function runDebate(
       {
         agent: critic,
         prompt: `${prompt}\n\nYou are the critic. Argue against the latest proposer position. Be specific and constructive.`,
-        context: transcript(turns),
+        context: threadedTranscript(turns, compact),
         sessionId,
       },
       client,
@@ -58,7 +81,7 @@ export async function runDebate(
         {
           agent: proposer,
           prompt: `${prompt}\n\nYou are the proposer. Respond to the critic's latest argument.`,
-          context: transcript(turns),
+          context: threadedTranscript(turns, compact),
           sessionId,
         },
         client,
@@ -74,7 +97,7 @@ export async function runDebate(
     {
       agent: proposer,
       prompt: `${prompt}\n\nYou are the proposer. Give your final closing rebuttal. Be concise and decisive.`,
-      context: transcript(turns),
+      context: threadedTranscript(turns, compact),
       sessionId,
     },
     client,
@@ -96,6 +119,8 @@ export async function runDebate(
     'Valid decisions: "adopt" (accept the proposal), "reject" (reject it), "revise" (accept with modifications).',
   ].join("\n");
 
+  // The judge always sees the full transcript — it is a single final call (not
+  // part of the O(n²) inter-turn threading) and verdict quality depends on it.
   const { result: judgeOutput } = await delegateTask(
     { agent: judge, prompt: judgePrompt, context: transcript(turns), sessionId },
     client,

@@ -611,6 +611,10 @@ function validateDebateWorkflow(name, w) {
     if (rounds !== undefined && (typeof rounds !== "number" || rounds < 1)) {
         throw new Error(`Workflow "${name}": "rounds" must be a positive number`);
     }
+    const compactContext = w["compactContext"];
+    if (compactContext !== undefined && typeof compactContext !== "boolean") {
+        throw new Error(`Workflow "${name}": "compactContext" must be a boolean`);
+    }
     return {
         pattern: "debate",
         description: typeof w["description"] === "string" ? w["description"] : undefined,
@@ -618,6 +622,7 @@ function validateDebateWorkflow(name, w) {
         critic: w["critic"],
         rounds: typeof rounds === "number" ? rounds : 2,
         judge: w["judge"],
+        ...(compactContext !== undefined ? { compactContext } : {}),
     };
 }
 //# sourceMappingURL=workflow-loader.js.map
