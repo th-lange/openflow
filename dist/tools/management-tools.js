@@ -1,7 +1,7 @@
 import { writeFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { assertAgentExists } from "../config/agent-registry.js";
-import { loadWorkflows, parseWorkflowEntry, } from "../config/workflow-loader.js";
+import { loadWorkflows, parseWorkflowEntry, resolveWorkflowMaps, } from "../config/workflow-loader.js";
 import { summariseWorkflow } from "./workflow-tools.js";
 import { readConfigObject, readConfigText, resolveConfigPath, setConfigValue, } from "../config/opencode-config.js";
 // Agent names reserved by openflow itself. They are shipped with the plugin and
@@ -122,6 +122,10 @@ export async function createWorkflow(input, client, directory = process.cwd()) {
             throw e;
         }
     }
+    // Warn if a global workflow of the same name will shadow this project entry
+    // at runtime (global wins — project is additive only, #82).
+    const { origin } = await resolveWorkflowMaps(directory);
+    const shadowed = origin[name] === "global";
     return [
         `Workflow "${name}" ${existed ? "updated" : "created"} in openflow.json.`,
         ``,
@@ -129,6 +133,15 @@ export async function createWorkflow(input, client, directory = process.cwd()) {
         `  ${summariseWorkflow({ ...parsed, name })}`,
         ...(input.description ? [`  description: ${input.description}`] : []),
         ``,
+        ...(shadowed
+            ? [
+                `⚠ A global workflow named "${name}" already exists and takes precedence.`,
+                `  This project entry will not run until the global one is renamed or removed`,
+                `  (global workflows win over project workflows). Use a different name to add a`,
+                `  project-specific workflow.`,
+                ``,
+            ]
+            : []),
         `Run it with: /workflow ${name}`,
     ].join("\n");
 }

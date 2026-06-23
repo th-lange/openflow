@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Global + project workflows** (#82) — openflow now reads workflows (and a user `agents` block) from a **global** `openflow.json` in OpenCode's config dir *and* the project `openflow.json`, merging them. The global file is a shared baseline available in every project; the project file is additive. On a name collision the **global** entry wins — a project cannot shadow it (matching the agent-injection precedence from #79). `list_workflows` tags each entry `[global]` / `[project]`, `create_workflow` warns when a name is already taken globally, and project workflows may reference global workflows/agents. `settings` layer the other way (project overrides global per key; env still wins).
+
 ## [0.2.14] - 2026-06-22
 
 ### Added

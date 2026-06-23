@@ -39,9 +39,7 @@ Everything else — the built-in agents and the `/workflow` and `/build-workflow
 
 Re-running is safe — the plugin entry is added once, and comments/formatting in your config are preserved.
 
-## 3. Create `openflow.json` in your project
-
-Define the workflows you want:
+## 3. Define your workflows in `openflow.json`
 
 ```json
 {
@@ -55,7 +53,14 @@ Define the workflows you want:
 }
 ```
 
-See [Extension](./extension.md) for every pattern and the full field reference. You don't have to hand-write this file — `/build-workflow` builds workflows interactively (see [Usage](./usage.md)).
+openflow reads **two** `openflow.json` files and merges them:
+
+- a **global** one in OpenCode's config dir (`~/.config/opencode/openflow.json`, same place `openflow install` targets) — a shared baseline available in **every** project, and
+- a **project** one in the project directory — additive on top of the global set.
+
+Put workflows you want everywhere in the global file; put project-specific ones in the project file. On a name collision the **global** workflow wins (a project can't shadow it — use a different name for a project variant). If you only ever use one machine-wide set, the global file alone is enough and you don't need a per-project file at all.
+
+See [Extension](./extension.md#global-vs-project-workflows) for the full merge rules, every pattern, and the field reference. You don't have to hand-write this file — `/build-workflow` builds workflows interactively (see [Usage](./usage.md)).
 
 ## 4. Start OpenCode
 

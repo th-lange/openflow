@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "jsonc-parser";
-import { readOpenflowFile, validateAgents } from "./workflow-loader.js";
+import { resolveUserAgents } from "./workflow-loader.js";
 
 // Single-file install (#79).
 //
@@ -59,13 +59,12 @@ export async function loadBuiltins(): Promise<Injectables> {
 }
 
 /**
- * User-defined agents from the project's `openflow.json` `agents` block.
- * Validated via the shared loader; an absent file or block yields {}.
+ * User-defined agents from the global + project `openflow.json` `agents` blocks
+ * (#82), global winning on a name collision. Validated via the shared loader; an
+ * absent file or block yields {}.
  */
 export async function loadUserAgents(directory: string): Promise<Record<string, AgentDef>> {
-  const parsed = await readOpenflowFile(directory);
-  if (!isRecord(parsed)) return {};
-  return validateAgents((parsed as Record<string, unknown>)["agents"]);
+  return resolveUserAgents(directory);
 }
 
 /**

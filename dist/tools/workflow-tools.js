@@ -1,11 +1,4 @@
-import { parseWorkflowEntry, readOpenflowFile, } from "../config/workflow-loader.js";
-async function readWorkflowsMap(directory) {
-    const parsed = await readOpenflowFile(directory);
-    if (parsed === undefined || typeof parsed !== "object" || parsed === null)
-        return {};
-    const workflows = parsed["workflows"];
-    return workflows && typeof workflows === "object" ? workflows : {};
-}
+import { parseWorkflowEntry, resolveWorkflowMaps, } from "../config/workflow-loader.js";
 export function summariseWorkflow(w) {
     switch (w.pattern) {
         case "sequential":
@@ -32,11 +25,11 @@ export function summariseWorkflow(w) {
  * loader would too. Throws on unknown, disabled, or malformed workflows.
  */
 export async function getWorkflow(name, directory = process.cwd()) {
-    const workflows = await readWorkflowsMap(directory);
-    const raw = workflows[name];
+    const { merged, origin } = await resolveWorkflowMaps(directory);
+    const raw = merged[name];
     if (!raw || typeof raw !== "object") {
-        const available = Object.keys(workflows)
-            .filter((k) => workflows[k]?.["disabled"] !== true)
+        const available = Object.keys(merged)
+            .filter((k) => merged[k]?.["disabled"] !== true)
             .join(", ");
         throw new Error(`Workflow "${name}" not found. Available: ${available || "(none)"}`);
     }
@@ -44,7 +37,7 @@ export async function getWorkflow(name, directory = process.cwd()) {
     if (parsed.disabled) {
         throw new Error(`Workflow "${name}" is disabled`);
     }
-    return { ...parsed, name };
+    return { ...parsed, name, origin: origin[name] };
 }
 /**
  * List workflows. Parses each entry with the canonical parser; an entry that
@@ -52,15 +45,15 @@ export async function getWorkflow(name, directory = process.cwd()) {
  * the whole listing or being silently dropped.
  */
 export async function listWorkflows(directory = process.cwd(), includeDisabled = false) {
-    const workflows = await readWorkflowsMap(directory);
+    const { merged, origin } = await resolveWorkflowMaps(directory);
     const out = [];
-    for (const [name, raw] of Object.entries(workflows)) {
+    for (const [name, raw] of Object.entries(merged)) {
         const isDisabled = raw?.["disabled"] === true;
         if (isDisabled && !includeDisabled)
             continue;
         try {
             const parsed = parseWorkflowEntry(name, raw);
-            out.push({ ...parsed, name });
+            out.push({ ...parsed, name, origin: origin[name] });
         }
         catch (e) {
             out.push({
@@ -68,6 +61,7 @@ export async function listWorkflows(directory = process.cwd(), includeDisabled =
                 invalid: true,
                 error: e instanceof Error ? e.message : String(e),
                 ...(isDisabled ? { disabled: true } : {}),
+                origin: origin[name],
             });
         }
     }

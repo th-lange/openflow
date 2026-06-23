@@ -5,6 +5,7 @@ import { assertAgentExists } from "../config/agent-registry.js";
 import {
   loadWorkflows,
   parseWorkflowEntry,
+  resolveWorkflowMaps,
   type Workflow,
 } from "../config/workflow-loader.js";
 import { summariseWorkflow } from "./workflow-tools.js";
@@ -184,6 +185,11 @@ export async function createWorkflow(
     }
   }
 
+  // Warn if a global workflow of the same name will shadow this project entry
+  // at runtime (global wins — project is additive only, #82).
+  const { origin } = await resolveWorkflowMaps(directory);
+  const shadowed = origin[name] === "global";
+
   return [
     `Workflow "${name}" ${existed ? "updated" : "created"} in openflow.json.`,
     ``,
@@ -191,6 +197,15 @@ export async function createWorkflow(
     `  ${summariseWorkflow({ ...parsed, name })}`,
     ...(input.description ? [`  description: ${input.description}`] : []),
     ``,
+    ...(shadowed
+      ? [
+          `⚠ A global workflow named "${name}" already exists and takes precedence.`,
+          `  This project entry will not run until the global one is renamed or removed`,
+          `  (global workflows win over project workflows). Use a different name to add a`,
+          `  project-specific workflow.`,
+          ``,
+        ]
+      : []),
     `Run it with: /workflow ${name}`,
   ].join("\n");
 }

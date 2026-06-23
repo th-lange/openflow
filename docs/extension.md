@@ -98,6 +98,19 @@ All workflows live under a `"workflows"` key, each keyed by name:
 
 The `pattern` field selects the coordination strategy. Omitting it defaults to `"sequential"`.
 
+### Global vs project workflows
+
+openflow reads **two** `openflow.json` files and merges them:
+
+- **Global** — `openflow.json` in OpenCode's config dir (`~/.config/opencode/` on Linux/Mac, `%APPDATA%\opencode` on Windows, or `$XDG_CONFIG_HOME/opencode`). A shared baseline of workflows available in **every** project.
+- **Project** — `openflow.json` in the project directory. **Additive**: it introduces new workflows on top of the global set.
+
+On a name collision **the global workflow wins** — a project cannot shadow or override a global one. To add a project-specific variant, give it a different name. `list_workflows` tags each entry `[global]` or `[project]` so you can see where it came from.
+
+This mirrors how the built-in agents are provided (see [Agents](#agents)): define the shared things once at the global level; projects only ever extend. `create_workflow` and `/build-workflow` write to the **project** file by default, and warn if a name is already taken globally. Project workflows may freely reference global workflows and agents.
+
+> **Settings** layer the other way: a project's `settings` block overrides the global one per key, since per-project tuning is the common case (env vars still win over both — see [Engine settings](#engine-settings)). A user `agents` block follows the workflow rule (global wins).
+
 ## Engine settings
 
 An optional top-level `"settings"` block tunes the execution engine. Both fields are optional; omitted values fall back to the defaults below.

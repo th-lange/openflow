@@ -58,7 +58,8 @@ describe("getWorkflow", () => {
     });
     const viaTool = await getWorkflow("qi", d);
     const registry = await loadWorkflows(makeClient(["coder", "analyzer"]), d);
-    const { name, ...toolParsed } = viaTool;
+    // name + origin are listing/lookup metadata the registry doesn't carry (#38, #82).
+    const { name, origin, ...toolParsed } = viaTool;
     assert.deepEqual(toolParsed, registry["qi"]);
   });
 

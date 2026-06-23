@@ -1,6 +1,7 @@
-import { type Workflow } from "../config/workflow-loader.js";
+import { type Workflow, type WorkflowOrigin } from "../config/workflow-loader.js";
 export type WorkflowInfo = Workflow & {
     name: string;
+    origin?: WorkflowOrigin;
 };
 /** An entry that failed to parse — surfaced in listings so it isn't silently hidden. */
 export type InvalidWorkflowInfo = {
@@ -8,6 +9,7 @@ export type InvalidWorkflowInfo = {
     invalid: true;
     error: string;
     disabled?: boolean;
+    origin?: WorkflowOrigin;
 };
 export declare function summariseWorkflow(w: WorkflowInfo): string;
 /**
