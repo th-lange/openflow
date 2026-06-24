@@ -101,6 +101,7 @@ export type DebateWorkflow = {
   critic: string;
   rounds: number;
   judge: string;
+  compactContext?: boolean;
 };
 
 export type Workflow =
@@ -795,6 +796,10 @@ function validateDebateWorkflow(name: string, w: Record<string, unknown>): Debat
   if (rounds !== undefined && (typeof rounds !== "number" || rounds < 1)) {
     throw new Error(`Workflow "${name}": "rounds" must be a positive number`);
   }
+  const compactContext = w["compactContext"];
+  if (compactContext !== undefined && typeof compactContext !== "boolean") {
+    throw new Error(`Workflow "${name}": "compactContext" must be a boolean`);
+  }
   return {
     pattern: "debate",
     description: typeof w["description"] === "string" ? w["description"] : undefined,
@@ -802,5 +807,6 @@ function validateDebateWorkflow(name: string, w: Record<string, unknown>): Debat
     critic: w["critic"] as string,
     rounds: typeof rounds === "number" ? rounds : 2,
     judge: w["judge"] as string,
+    ...(compactContext !== undefined ? { compactContext } : {}),
   };
 }

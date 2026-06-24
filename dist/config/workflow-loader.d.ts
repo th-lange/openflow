@@ -93,6 +93,7 @@ export type DebateWorkflow = {
     critic: string;
     rounds: number;
     judge: string;
+    compactContext?: boolean;
 };
 export type Workflow = SequentialWorkflow | OrchestratorWorkflow | EvaluatorOptimizerWorkflow | ConditionalWorkflow | FanoutWorkflow | ParallelWorkflow | DebateWorkflow;
 export type WorkflowRegistry = Record<string, Workflow>;

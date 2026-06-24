@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Compact debate transcript threading** (#73) — the debate pattern no longer re-sends the full, growing transcript to every participant on every turn (the O(n²) input-token blow-up surfaced by the #65 spike). The transcript threaded *between* turns is now compacted by default — every turn except the most recent is reduced to its handoff block (or a bounded truncation), with the latest turn kept full so each participant engages with it directly. The **judge** still receives the complete, uncompacted transcript and the final relay shows the full transcript, so verdict quality and readable output are unaffected. Opt out with `compactContext: false` (mirrors the sequential control from #64). Token reduction is visible in the cost footer (#62) on multi-round debates.
+
 ## [0.2.15] - 2026-06-23
 
 ### Added

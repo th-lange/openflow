@@ -400,9 +400,10 @@ Unlike fan-out, each subtask has its own prompt. The original user prompt is for
 | `critic` | yes | — | Agent that argues against the proposal |
 | `judge` | yes | — | Agent that reviews the full transcript and delivers a verdict |
 | `rounds` | no | `2` | Number of propose/critique cycles before the judge |
+| `compactContext` | no | `true` | Compact the transcript threaded *between* turns (see below) |
 | `description` / `disabled` | no | — | See [Common fields](#common-fields) |
 
-The full debate transcript is passed to each participant at every turn. The judge receives the complete exchange and returns a decision with reasoning.
+By default the transcript threaded *between* turns is compacted: every turn except the most recent is reduced to its [handoff block](#token-efficiency) (or a bounded truncation when the agent emits none), so the inter-turn context stops growing with the full transcript — the latest turn is always threaded in full so each participant engages with it directly. The **judge** still receives the complete, uncompacted transcript and the final relay shows the full transcript, so verdict quality and readable output are unaffected. Set `compactContext: false` to thread the full transcript on every turn (the pre-0.2.16 behaviour).
 
 ### Common fields
 
